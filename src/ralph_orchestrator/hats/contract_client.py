@@ -306,7 +306,7 @@ class HatsContractClient:
                     "nonce": self._web3.eth.get_transaction_count(
                         self._account.address
                     ),
-                    "gas": 150000,
+                    "gas": 300000,  # Increased for string storage
                     "maxFeePerGas": self._web3.eth.gas_price * 2,
                     "maxPriorityFeePerGas": self._web3.eth.gas_price // 10,
                 }
