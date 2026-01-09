@@ -28,12 +28,45 @@ from .auth import (
 from .database import DatabaseManager
 from .rate_limit import rate_limit_middleware, setup_rate_limit_cleanup
 
+# Optional Hats imports
+try:
+    from ..hats import HatsApprovalManager
+    from ..hats.models import HatsApprovalConfig
+    from ..hats.contract_client import HatsContractClient
+    HATS_AVAILABLE = True
+except ImportError:
+    HATS_AVAILABLE = False
+    HatsApprovalManager = None
+    HatsApprovalConfig = None
+    HatsContractClient = None
+
 logger = logging.getLogger(__name__)
 
 
 class PromptUpdateRequest(BaseModel):
     """Request model for updating orchestrator prompt."""
     content: str
+
+
+class VoteRequest(BaseModel):
+    """Request model for voting on a proposal."""
+    proposal_id: int
+    support: bool  # True for yes, False for no
+
+
+class SignedVoteRequest(BaseModel):
+    """Request model for voting with wallet signature."""
+    proposal_id: int
+    support: bool
+    voter: str  # Ethereum address
+    signature: str  # EIP-712 signature
+
+
+class TypedDataRequest(BaseModel):
+    """Request model for getting EIP-712 typed data to sign."""
+    proposal_id: int
+    support: bool
+    voter: str  # Ethereum address
 
 
 class OrchestratorMonitor:
@@ -272,14 +305,43 @@ class OrchestratorMonitor:
 
 class WebMonitor:
     """Web monitoring server for Ralph Orchestrator."""
-    
+
     def __init__(self, host: str = "0.0.0.0", port: int = 8080, enable_auth: bool = True):
         self.host = host
         self.port = port
         self.enable_auth = enable_auth
         self.monitor = OrchestratorMonitor()
         self.app = None
+        self._hats_client = None
         self._setup_app()
+
+    def _get_hats_client(self):
+        """Get or create a Hats contract client for direct contract access."""
+        if not HATS_AVAILABLE:
+            return None
+
+        # First try to get from an active orchestrator
+        for orch in self.monitor.active_orchestrators.values():
+            if hasattr(orch, 'hats_manager') and orch.hats_manager:
+                return orch.hats_manager.client
+
+        # Otherwise, create a standalone client from config
+        if self._hats_client is None:
+            try:
+                import yaml
+                config_path = Path("ralph.yml")
+                if config_path.exists():
+                    with open(config_path) as f:
+                        config_data = yaml.safe_load(f)
+                    if 'hats_approval' in config_data:
+                        hats_config = HatsApprovalConfig.from_dict(config_data['hats_approval'])
+                        if hats_config.enabled and hats_config.ralph_proposal_contract:
+                            self._hats_client = HatsContractClient(hats_config)
+                            logger.info("Created standalone Hats contract client")
+            except Exception as e:
+                logger.warning(f"Could not create standalone Hats client: {e}")
+
+        return self._hats_client
     
     def _setup_app(self):
         """Setup FastAPI application."""
@@ -628,14 +690,14 @@ class WebMonitor:
         
         @self.app.post("/api/auth/change-password", dependencies=[auth_dependency] if self.enable_auth else [])
         async def change_password(
-            old_password: str, 
-            new_password: str, 
+            old_password: str,
+            new_password: str,
             current_user: Dict[str, Any] = Depends(get_current_user) if self.enable_auth else None
         ):
             """Change the current user's password."""
             if not self.enable_auth:
                 raise HTTPException(status_code=404, detail="Authentication not enabled")
-            
+
             # Verify old password
             user = auth_manager.authenticate_user(current_user["username"], old_password)
             if not user:
@@ -643,7 +705,7 @@ class WebMonitor:
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Incorrect old password"
                 )
-            
+
             # Update password
             if auth_manager.update_password(current_user["username"], new_password):
                 return {"status": "success", "message": "Password updated"}
@@ -652,7 +714,396 @@ class WebMonitor:
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail="Failed to update password"
                 )
-        
+
+        # Hats Protocol endpoints
+        @self.app.get("/api/hats/status")
+        async def get_hats_status():
+            """Get Hats Protocol integration status."""
+            if not HATS_AVAILABLE:
+                return {"enabled": False, "reason": "Hats dependencies not installed"}
+
+            client = self._get_hats_client()
+            if not client:
+                return {"enabled": False, "reason": "No Hats configuration found"}
+
+            try:
+                proposal_count = client.get_proposal_count()
+                return {
+                    "enabled": True,
+                    "proposal_count": proposal_count,
+                    "contract": client.config.ralph_proposal_contract
+                }
+            except Exception as e:
+                return {"enabled": False, "reason": str(e)}
+
+        @self.app.get("/api/hats/proposals")
+        async def get_hats_proposals():
+            """Get all proposals from the contract."""
+            if not HATS_AVAILABLE:
+                raise HTTPException(status_code=503, detail="Hats dependencies not installed")
+
+            client = self._get_hats_client()
+            if not client:
+                raise HTTPException(status_code=503, detail="No Hats configuration found")
+
+            try:
+                proposal_count = client.get_proposal_count()
+                proposals = []
+
+                # Get all proposals from contract
+                for i in range(1, proposal_count + 1):
+                    try:
+                        details = client.get_proposal_details(i)
+                        result = client.get_proposal_result(i)
+                        # Determine status
+                        if result[3]:  # finalized
+                            status = "approved" if result[0] else "rejected"
+                        else:
+                            import time
+                            if details["deadline"] < time.time():
+                                status = "expired"
+                            else:
+                                status = "pending"
+
+                        proposals.append({
+                            "id": i,
+                            "question_hash": details["question_hash"],
+                            "hat_id": str(details["required_hat_id"]),
+                            "deadline": details["deadline"],
+                            "deadline_formatted": datetime.fromtimestamp(details["deadline"]).isoformat(),
+                            "status": status,
+                            "yes_votes": details["yes_votes"],
+                            "no_votes": details["no_votes"],
+                            "executed": details["executed"],
+                            "creator": details["creator"]
+                        })
+                    except Exception as e:
+                        logger.warning(f"Error getting proposal {i}: {e}")
+
+                return {"proposals": proposals, "count": len(proposals)}
+            except Exception as e:
+                logger.error(f"Failed to get proposals: {e}")
+                raise HTTPException(status_code=500, detail=str(e)) from e
+
+        @self.app.get("/api/hats/proposals/{proposal_id}")
+        async def get_hats_proposal(proposal_id: int):
+            """Get details of a specific proposal."""
+            if not HATS_AVAILABLE:
+                raise HTTPException(status_code=503, detail="Hats dependencies not installed")
+
+            client = self._get_hats_client()
+            if not client:
+                raise HTTPException(status_code=503, detail="No Hats configuration found")
+
+            try:
+                details = client.get_proposal_details(proposal_id)
+                result = client.get_proposal_result(proposal_id)
+
+                # Determine status
+                if result[3]:  # finalized
+                    status = "approved" if result[0] else "rejected"
+                else:
+                    import time
+                    if details["deadline"] < time.time():
+                        status = "expired"
+                    else:
+                        status = "pending"
+
+                return {
+                    "id": proposal_id,
+                    "question_hash": details["question_hash"],
+                    "hat_id": str(details["required_hat_id"]),
+                    "deadline": details["deadline"],
+                    "deadline_formatted": datetime.fromtimestamp(details["deadline"]).isoformat(),
+                    "status": status,
+                    "yes_votes": details["yes_votes"],
+                    "no_votes": details["no_votes"],
+                    "executed": details["executed"],
+                    "creator": details["creator"],
+                    "approved": result[0],
+                    "finalized": result[3]
+                }
+            except Exception as e:
+                logger.error(f"Failed to get proposal {proposal_id}: {e}")
+                raise HTTPException(status_code=404, detail=str(e)) from e
+
+        @self.app.post("/api/hats/vote")
+        async def vote_on_proposal(vote_request: VoteRequest):
+            """Vote on a proposal (requires private key configured)."""
+            if not HATS_AVAILABLE:
+                raise HTTPException(status_code=503, detail="Hats dependencies not installed")
+
+            client = self._get_hats_client()
+            if not client:
+                raise HTTPException(status_code=503, detail="No Hats configuration found")
+
+            try:
+                tx_hash = await client.vote(
+                    vote_request.proposal_id,
+                    vote_request.support
+                )
+
+                # Broadcast vote update to WebSocket clients
+                await self.monitor._broadcast_to_clients({
+                    "type": "vote_cast",
+                    "data": {
+                        "proposal_id": vote_request.proposal_id,
+                        "support": vote_request.support,
+                        "tx_hash": tx_hash,
+                        "timestamp": datetime.now().isoformat()
+                    }
+                })
+
+                return {
+                    "status": "success",
+                    "proposal_id": vote_request.proposal_id,
+                    "support": vote_request.support,
+                    "tx_hash": tx_hash
+                }
+            except Exception as e:
+                logger.error(f"Failed to vote: {e}")
+                raise HTTPException(status_code=500, detail=str(e)) from e
+
+        @self.app.get("/api/hats/check-wearer/{address}")
+        async def check_hat_wearer(address: str):
+            """Check if an address wears any voting hats."""
+            if not HATS_AVAILABLE:
+                raise HTTPException(status_code=503, detail="Hats dependencies not installed")
+
+            client = self._get_hats_client()
+            if not client:
+                raise HTTPException(status_code=503, detail="No Hats configuration found")
+
+            try:
+                hats_worn = {}
+                for decision_type, hat_id in client.config.decision_mappings.items():
+                    is_wearer = client.is_wearer_of_hat(address, int(hat_id))
+                    hats_worn[decision_type] = {
+                        "hat_id": str(hat_id),
+                        "is_wearer": is_wearer
+                    }
+
+                return {
+                    "address": address,
+                    "hats": hats_worn,
+                    "can_vote": any(h["is_wearer"] for h in hats_worn.values())
+                }
+            except Exception as e:
+                logger.error(f"Failed to check hat wearer: {e}")
+                raise HTTPException(status_code=500, detail=str(e)) from e
+
+        @self.app.get("/api/hats/proposals/{proposal_id}/content")
+        async def get_proposal_content(proposal_id: int):
+            """Get proposal details including IPFS content."""
+            if not HATS_AVAILABLE:
+                raise HTTPException(status_code=503, detail="Hats dependencies not installed")
+
+            client = self._get_hats_client()
+            if not client:
+                raise HTTPException(status_code=503, detail="No Hats configuration found")
+
+            try:
+                # Get on-chain data
+                details = client.get_proposal_details(proposal_id)
+                result = client.get_proposal_result(proposal_id)
+
+                # Determine status
+                if result[3]:  # finalized
+                    proposal_status = "approved" if result[0] else "rejected"
+                else:
+                    import time as time_module
+                    if details["deadline"] < time_module.time():
+                        proposal_status = "expired"
+                    else:
+                        proposal_status = "pending"
+
+                # Get IPFS content from local database
+                db_proposal = self.monitor.database.get_proposal(proposal_id)
+                content = None
+                if db_proposal:
+                    content = {
+                        "question": db_proposal.get("question_text"),
+                        "decision_type": db_proposal.get("decision_type"),
+                        "context": db_proposal.get("context"),
+                        "ipfs_cid": db_proposal.get("ipfs_cid"),
+                    }
+
+                return {
+                    "id": proposal_id,
+                    "question_hash": details["question_hash"],
+                    "hat_id": str(details["required_hat_id"]),
+                    "deadline": details["deadline"],
+                    "deadline_formatted": datetime.fromtimestamp(details["deadline"]).isoformat(),
+                    "status": proposal_status,
+                    "yes_votes": details["yes_votes"],
+                    "no_votes": details["no_votes"],
+                    "executed": details["executed"],
+                    "creator": details["creator"],
+                    "content": content
+                }
+            except Exception as e:
+                logger.error(f"Failed to get proposal content: {e}")
+                raise HTTPException(status_code=404, detail=str(e)) from e
+
+        @self.app.get("/api/hats/proposals/history")
+        async def get_proposal_history(limit: int = 50, status: Optional[str] = None):
+            """Get historical proposals from database."""
+            proposals = self.monitor.database.get_proposal_history(limit, status)
+            return {"proposals": proposals, "count": len(proposals)}
+
+        @self.app.get("/api/hats/proposals/{proposal_id}/votes")
+        async def get_proposal_votes(proposal_id: int):
+            """Get all votes for a proposal."""
+            votes = self.monitor.database.get_votes_for_proposal(proposal_id)
+            return {"proposal_id": proposal_id, "votes": votes, "count": len(votes)}
+
+        @self.app.get("/api/hats/voters/{address}/history")
+        async def get_voter_history(address: str, limit: int = 50):
+            """Get voting history for a specific address."""
+            history = self.monitor.database.get_voter_history(address, limit)
+            return {"voter": address, "votes": history, "count": len(history)}
+
+        @self.app.post("/api/hats/typed-data")
+        async def get_typed_data(request: TypedDataRequest):
+            """Get EIP-712 typed data for signing a vote."""
+            if not HATS_AVAILABLE:
+                raise HTTPException(status_code=503, detail="Hats dependencies not installed")
+
+            # Import EIP712 authenticator
+            from ..hats.eip712_auth import EIP712Authenticator, EIP712Domain
+
+            client = self._get_hats_client()
+            if not client:
+                raise HTTPException(status_code=503, detail="No Hats configuration found")
+
+            # Create domain
+            domain = EIP712Domain(
+                name="RalphOrchestrator",
+                version="1",
+                chain_id=client.config.chain_id,
+                verifying_contract=client.config.ralph_proposal_contract,
+            )
+
+            # Create authenticator just for typed data generation
+            authenticator = EIP712Authenticator(
+                domain=domain,
+                hats_client=client,
+            )
+
+            typed_data = authenticator.get_typed_data(
+                request.proposal_id,
+                request.support,
+                request.voter
+            )
+
+            return {
+                "typed_data": typed_data,
+                "message": authenticator.get_signing_message(
+                    request.proposal_id,
+                    request.support,
+                    request.voter
+                )
+            }
+
+        @self.app.post("/api/hats/vote-signed")
+        async def vote_with_signature(request: SignedVoteRequest):
+            """Submit a vote with EIP-712 signature from wallet."""
+            if not HATS_AVAILABLE:
+                raise HTTPException(status_code=503, detail="Hats dependencies not installed")
+
+            from ..hats.eip712_auth import EIP712Authenticator, EIP712Domain
+
+            client = self._get_hats_client()
+            if not client:
+                raise HTTPException(status_code=503, detail="No Hats configuration found")
+
+            try:
+                # Get proposal details to find required hat ID
+                details = client.get_proposal_details(request.proposal_id)
+                required_hat_id = details["required_hat_id"]
+
+                # Create authenticator for verification
+                domain = EIP712Domain(
+                    name="RalphOrchestrator",
+                    version="1",
+                    chain_id=client.config.chain_id,
+                    verifying_contract=client.config.ralph_proposal_contract,
+                )
+                authenticator = EIP712Authenticator(
+                    domain=domain,
+                    hats_client=client,
+                )
+
+                # Verify signature and hat wearer status
+                is_valid = authenticator.verify_vote_signature(
+                    request.proposal_id,
+                    request.support,
+                    request.voter,
+                    request.signature,
+                    required_hat_id,
+                )
+
+                if not is_valid:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Invalid signature or not a hat wearer"
+                    )
+
+                # Record vote in database
+                self.monitor.database.record_vote(
+                    request.proposal_id,
+                    request.voter,
+                    request.support,
+                    signature=request.signature,
+                )
+
+                # If server has private key, submit on-chain vote
+                tx_hash = None
+                if client._account:
+                    tx_hash = await client.vote(request.proposal_id, request.support)
+
+                # Broadcast vote update
+                await self.monitor._broadcast_to_clients({
+                    "type": "vote_cast",
+                    "data": {
+                        "proposal_id": request.proposal_id,
+                        "voter": request.voter,
+                        "support": request.support,
+                        "tx_hash": tx_hash,
+                        "timestamp": datetime.now().isoformat()
+                    }
+                })
+
+                return {
+                    "status": "success",
+                    "proposal_id": request.proposal_id,
+                    "voter": request.voter,
+                    "support": request.support,
+                    "tx_hash": tx_hash,
+                    "on_chain": tx_hash is not None
+                }
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error(f"Failed to process signed vote: {e}")
+                raise HTTPException(status_code=500, detail=str(e)) from e
+
+        @self.app.get("/hats")
+        async def hats_voting_page():
+            """Serve the Hats voting interface with wallet connection support."""
+            static_dir = Path(__file__).parent / "static"
+            voting_file = static_dir / "voting.html"
+            if voting_file.exists():
+                return FileResponse(voting_file, media_type="text/html")
+            else:
+                # Fallback: return a simple redirect message
+                return HTMLResponse(content="""
+                    <html><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
+                    <h1>Voting UI Not Found</h1>
+                    <p>The voting.html file is missing from the static directory.</p>
+                    </body></html>
+                """)
+
         @self.app.websocket("/ws")
         async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = None):
             """WebSocket endpoint for real-time updates."""

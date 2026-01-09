@@ -93,3 +93,46 @@ adapters:
       agent_args: []                   # Args passed to the ACP agent
       permission_mode: interactive      # auto_approve | deny_all | allowlist | interactive
       permission_allowlist: []         # Used when permission_mode=allowlist
+
+# Human-in-the-loop approvals using Hats Protocol
+# Questions are surfaced as on-chain proposals that hat wearers vote on
+hats_approval:
+  enabled: true                        # Hats approval gates enabled
+
+  # Base chain configuration
+  chain:
+    rpc_url: "https://base.publicnode.com"  # Less rate-limited than mainnet.base.org
+    chain_id: 8453
+
+  # Contract addresses
+  contracts:
+    hats_protocol: "0x3bc1A0Ad72417f2d411118085256fC53CBdDd137"  # Hats Protocol on Base
+    ralph_proposal: "0x5c63baF1501B9c50dA4a9e1A38BeC430a2b3d4Df"  # Deployed RalphProposal contract
+
+  # Voting configuration
+  voting_period: 300                   # Voting period in seconds (5 minutes)
+  poll_interval: 5                     # Seconds between checking results
+
+  # Decision type to Hat ID mappings
+  # Map each decision type to a hat ID that can approve it
+  # Hat IDs are uint256 values from your Hats Protocol tree
+  decision_mappings:
+    iteration_approval: 50118541265609178708587491585511789061629077727186890650766577290444800
+    cost_threshold: 50118541676985318038889002124254084700966703972870857059161543127597056
+
+  # Cost threshold configuration
+  cost_threshold_trigger: 10.0         # USD - trigger approval when cost exceeds this
+
+  # Authentication settings
+  require_signature: true              # Require EIP-712 signatures for votes
+
+  # IPFS configuration for storing proposal content
+  ipfs:
+    enabled: true
+    provider: "pinata"                 # pinata or web3storage
+    gateway_url: "https://gateway.pinata.cloud/ipfs"
+    cache_ttl: 3600                    # Cache TTL in seconds (1 hour)
+    # API keys loaded from environment:
+    # PINATA_API_KEY, PINATA_SECRET_KEY
+
+  # Private key loaded from .env file (RALPH_HATS_PRIVATE_KEY)

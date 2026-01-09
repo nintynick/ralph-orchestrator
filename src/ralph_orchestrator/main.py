@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from .orchestrator import RalphOrchestrator
+from .hats.models import HatsApprovalConfig
 
 
 # Configuration defaults
@@ -236,6 +237,9 @@ class RalphConfig:
     show_token_usage: bool = True  # Display token usage after iterations
     show_timestamps: bool = True  # Include timestamps in output
 
+    # Hats Protocol approval configuration
+    hats_approval: HatsApprovalConfig = field(default_factory=HatsApprovalConfig)
+
     # Thread safety lock - not included in initialization/equals
     _lock: threading.RLock = field(
         default_factory=threading.RLock, init=False, repr=False, compare=False
@@ -336,6 +340,14 @@ class RalphConfig:
                     # Simple boolean enable/disable
                     adapter_configs[name] = AdapterConfig(enabled=bool(adapter_data))
             config_data['adapters'] = adapter_configs
+
+        # Process Hats Protocol approval configuration
+        if 'hats_approval' in config_data:
+            hats_data = config_data['hats_approval']
+            if isinstance(hats_data, dict):
+                config_data['hats_approval'] = HatsApprovalConfig.from_dict(hats_data)
+            else:
+                config_data['hats_approval'] = HatsApprovalConfig()
 
         # Filter out unknown keys
         valid_keys = {f.name for f in cls.__dataclass_fields__.values()}

@@ -95,24 +95,75 @@ class DatabaseManager:
                     )
                 """)
                 
+                # Create proposals table for Hats voting
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS proposals (
+                        id INTEGER PRIMARY KEY,
+                        question_hash TEXT NOT NULL,
+                        ipfs_cid TEXT,
+                        question_text TEXT,
+                        decision_type TEXT,
+                        context TEXT,
+                        required_hat_id TEXT,
+                        deadline TIMESTAMP,
+                        status TEXT DEFAULT 'pending',
+                        yes_votes INTEGER DEFAULT 0,
+                        no_votes INTEGER DEFAULT 0,
+                        creator_address TEXT,
+                        tx_hash TEXT,
+                        created_at TIMESTAMP NOT NULL
+                    )
+                """)
+
+                # Create votes table for Hats voting history
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS votes (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        proposal_id INTEGER NOT NULL,
+                        voter_address TEXT NOT NULL,
+                        support BOOLEAN NOT NULL,
+                        signature TEXT,
+                        tx_hash TEXT,
+                        voted_at TIMESTAMP NOT NULL,
+                        FOREIGN KEY (proposal_id) REFERENCES proposals(id),
+                        UNIQUE(proposal_id, voter_address)
+                    )
+                """)
+
                 # Create indices for better query performance
                 cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_runs_orchestrator_id 
+                    CREATE INDEX IF NOT EXISTS idx_runs_orchestrator_id
                     ON orchestrator_runs(orchestrator_id)
                 """)
                 cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_runs_start_time 
+                    CREATE INDEX IF NOT EXISTS idx_runs_start_time
                     ON orchestrator_runs(start_time DESC)
                 """)
                 cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_iterations_run_id 
+                    CREATE INDEX IF NOT EXISTS idx_iterations_run_id
                     ON iteration_history(run_id)
                 """)
                 cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_tasks_run_id 
+                    CREATE INDEX IF NOT EXISTS idx_tasks_run_id
                     ON task_history(run_id)
                 """)
-                
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_proposals_status
+                    ON proposals(status)
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_proposals_deadline
+                    ON proposals(deadline)
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_votes_proposal
+                    ON votes(proposal_id)
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_votes_voter
+                    ON votes(voter_address)
+                """)
+
                 conn.commit()
     
     def create_run(self, orchestrator_id: str, prompt_path: str, 
@@ -465,3 +516,281 @@ class DatabaseManager:
                     
                     conn.commit()
                     logger.info(f"Cleaned up {len(run_ids)} old runs")
+
+    # ========== Proposals and Votes Methods ==========
+
+    def store_proposal(
+        self,
+        proposal_id: int,
+        question_hash: str,
+        ipfs_cid: Optional[str] = None,
+        question_text: Optional[str] = None,
+        decision_type: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
+        required_hat_id: Optional[str] = None,
+        deadline: Optional[str] = None,
+        creator_address: Optional[str] = None,
+        tx_hash: Optional[str] = None,
+        status: str = "pending",
+    ) -> None:
+        """Store a proposal in the database.
+
+        Args:
+            proposal_id: On-chain proposal ID
+            question_hash: Hash of the question
+            ipfs_cid: IPFS content identifier
+            question_text: The actual question text
+            decision_type: Type of decision
+            context: Additional context (JSON)
+            required_hat_id: Hat ID required to vote
+            deadline: Voting deadline timestamp
+            creator_address: Address that created the proposal
+            tx_hash: Transaction hash of creation
+            status: Proposal status (pending, approved, rejected, expired)
+        """
+        with self._lock:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    INSERT OR REPLACE INTO proposals
+                    (id, question_hash, ipfs_cid, question_text, decision_type,
+                     context, required_hat_id, deadline, creator_address, tx_hash, status, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                    (
+                        proposal_id,
+                        question_hash,
+                        ipfs_cid,
+                        question_text,
+                        decision_type,
+                        json.dumps(context) if context else None,
+                        required_hat_id,
+                        deadline,
+                        creator_address,
+                        tx_hash,
+                        status,
+                        datetime.now().isoformat(),
+                    ),
+                )
+                conn.commit()
+
+    def update_proposal_status(
+        self,
+        proposal_id: int,
+        status: str,
+        yes_votes: int = 0,
+        no_votes: int = 0,
+    ) -> None:
+        """Update proposal status and vote counts.
+
+        Args:
+            proposal_id: ID of the proposal
+            status: New status (pending, approved, rejected, expired)
+            yes_votes: Number of yes votes
+            no_votes: Number of no votes
+        """
+        with self._lock:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    UPDATE proposals
+                    SET status = ?, yes_votes = ?, no_votes = ?
+                    WHERE id = ?
+                """,
+                    (status, yes_votes, no_votes, proposal_id),
+                )
+                conn.commit()
+
+    def record_vote(
+        self,
+        proposal_id: int,
+        voter_address: str,
+        support: bool,
+        signature: Optional[str] = None,
+        tx_hash: Optional[str] = None,
+    ) -> None:
+        """Record a vote in the database.
+
+        Args:
+            proposal_id: ID of the proposal
+            voter_address: Address of the voter
+            support: True for yes, False for no
+            signature: EIP-712 signature
+            tx_hash: Transaction hash if on-chain
+        """
+        with self._lock:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    INSERT OR REPLACE INTO votes
+                    (proposal_id, voter_address, support, signature, tx_hash, voted_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                    (
+                        proposal_id,
+                        voter_address.lower(),
+                        support,
+                        signature,
+                        tx_hash,
+                        datetime.now().isoformat(),
+                    ),
+                )
+                conn.commit()
+
+    def get_proposal(self, proposal_id: int) -> Optional[Dict[str, Any]]:
+        """Get a proposal by ID.
+
+        Args:
+            proposal_id: ID of the proposal
+
+        Returns:
+            Proposal dictionary or None
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM proposals WHERE id = ?", (proposal_id,))
+            row = cursor.fetchone()
+            if not row:
+                return None
+
+            proposal = dict(row)
+            if proposal.get("context"):
+                proposal["context"] = json.loads(proposal["context"])
+            return proposal
+
+    def get_proposal_by_hash(self, question_hash: str) -> Optional[Dict[str, Any]]:
+        """Get a proposal by question hash.
+
+        Args:
+            question_hash: Hash of the question
+
+        Returns:
+            Proposal dictionary or None
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT * FROM proposals WHERE question_hash = ?", (question_hash,)
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+
+            proposal = dict(row)
+            if proposal.get("context"):
+                proposal["context"] = json.loads(proposal["context"])
+            return proposal
+
+    def get_proposal_history(
+        self, limit: int = 50, status: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Get historical proposals.
+
+        Args:
+            limit: Maximum number of proposals to return
+            status: Optional status filter
+
+        Returns:
+            List of proposal dictionaries
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            if status:
+                cursor.execute(
+                    """
+                    SELECT * FROM proposals
+                    WHERE status = ?
+                    ORDER BY created_at DESC
+                    LIMIT ?
+                """,
+                    (status, limit),
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT * FROM proposals
+                    ORDER BY created_at DESC
+                    LIMIT ?
+                """,
+                    (limit,),
+                )
+
+            proposals = []
+            for row in cursor.fetchall():
+                proposal = dict(row)
+                if proposal.get("context"):
+                    proposal["context"] = json.loads(proposal["context"])
+                proposals.append(proposal)
+
+            return proposals
+
+    def get_votes_for_proposal(self, proposal_id: int) -> List[Dict[str, Any]]:
+        """Get all votes for a proposal.
+
+        Args:
+            proposal_id: ID of the proposal
+
+        Returns:
+            List of vote dictionaries
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT * FROM votes
+                WHERE proposal_id = ?
+                ORDER BY voted_at DESC
+            """,
+                (proposal_id,),
+            )
+
+            return [dict(row) for row in cursor.fetchall()]
+
+    def get_voter_history(
+        self, voter_address: str, limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """Get voting history for a specific address.
+
+        Args:
+            voter_address: Ethereum address
+            limit: Maximum number of votes to return
+
+        Returns:
+            List of vote dictionaries with proposal info
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT v.*, p.question_text, p.decision_type, p.status as proposal_status
+                FROM votes v
+                JOIN proposals p ON v.proposal_id = p.id
+                WHERE v.voter_address = ?
+                ORDER BY v.voted_at DESC
+                LIMIT ?
+            """,
+                (voter_address.lower(), limit),
+            )
+
+            return [dict(row) for row in cursor.fetchall()]
+
+    def get_proposal_cid(self, proposal_id: int) -> Optional[str]:
+        """Get the IPFS CID for a proposal.
+
+        Args:
+            proposal_id: ID of the proposal
+
+        Returns:
+            IPFS CID or None
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT ipfs_cid FROM proposals WHERE id = ?", (proposal_id,)
+            )
+            row = cursor.fetchone()
+            return row[0] if row else None

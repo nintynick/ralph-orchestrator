@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ralph - Hats Voting Portal</title>
+    <script src="https://cdn.jsdelivr.net/npm/ethers@6.9.0/dist/ethers.umd.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0f0f0f;
+            --bg-secondary: #1a1a1a;
+            --bg-tertiary: #252525;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0a0;
+            --text-muted: #666666;
+            --accent-green: #4ade80;
+            --accent-red: #f87171;
+            --accent-yellow: #fbbf24;
+            --accent-blue: #60a5fa;
+            --border-color: #333333;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 0;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        /* Wallet Button */
+        .wallet-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .wallet-btn.connect {
+            background: var(--accent-blue);
+            color: white;
+        }
+
+        .wallet-btn.connect:hover {
+            background: #3b82f6;
+        }
+
+        .wallet-btn.connected {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .wallet-btn .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent-green);
+        }
+
+        /* Status Bar */
+        .status-bar {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border: 1px solid var(--border-color);
+        }
+
+        .status-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-label {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .status-value {
+            font-weight: 600;
+        }
+
+        .hat-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .hat-badge.wearer {
+            background: rgba(74, 222, 128, 0.2);
+            color: var(--accent-green);
+        }
+
+        .hat-badge.not-wearer {
+            background: rgba(248, 113, 113, 0.2);
+            color: var(--accent-red);
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .tab:hover {
+            color: var(--text-primary);
+            background: var(--bg-tertiary);
+        }
+
+        .tab.active {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        /* Proposal Card */
+        .proposal-card {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 16px;
+            border: 1px solid var(--border-color);
+            transition: border-color 0.2s;
+        }
+
+        .proposal-card:hover {
+            border-color: #444;
+        }
+
+        .proposal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 16px;
+        }
+
+        .proposal-id {
+            color: var(--text-muted);
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .proposal-status {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-pending {
+            background: var(--accent-yellow);
+            color: #000;
+        }
+
+        .status-approved {
+            background: var(--accent-green);
+            color: #000;
+        }
+
+        .status-rejected {
+            background: var(--accent-red);
+            color: #000;
+        }
+
+        .status-expired {
+            background: var(--text-muted);
+            color: #000;
+        }
+
+        .proposal-question {
+            font-size: 18px;
+            font-weight: 500;
+            margin-bottom: 12px;
+            color: var(--text-primary);
+        }
+
+        .proposal-meta {
+            display: flex;
+            gap: 24px;
+            margin-bottom: 16px;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .proposal-meta span {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .vote-counts {
+            display: flex;
+            gap: 24px;
+            margin-bottom: 20px;
+        }
+
+        .vote-count {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .vote-count.yes {
+            color: var(--accent-green);
+        }
+
+        .vote-count.no {
+            color: var(--accent-red);
+        }
+
+        .vote-progress {
+            height: 6px;
+            background: var(--bg-tertiary);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        .vote-progress-bar {
+            height: 100%;
+            background: var(--accent-green);
+            transition: width 0.3s;
+        }
+
+        .vote-actions {
+            display: flex;
+            gap: 12px;
+        }
+
+        .vote-btn {
+            flex: 1;
+            padding: 14px 24px;
+            border-radius: 8px;
+            border: none;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .vote-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .vote-btn.yes {
+            background: var(--accent-green);
+            color: #000;
+        }
+
+        .vote-btn.yes:hover:not(:disabled) {
+            background: #22c55e;
+        }
+
+        .vote-btn.no {
+            background: var(--accent-red);
+            color: #000;
+        }
+
+        .vote-btn.no:hover:not(:disabled) {
+            background: #ef4444;
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-muted);
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        .empty-state p {
+            font-size: 16px;
+        }
+
+        /* History Table */
+        .history-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .history-table th {
+            text-align: left;
+            padding: 12px 16px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .history-table td {
+            padding: 16px;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 14px;
+        }
+
+        .history-table tr:hover td {
+            background: var(--bg-secondary);
+        }
+
+        /* Toast */
+        .toast-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+
+        .toast {
+            padding: 16px 20px;
+            border-radius: 8px;
+            margin-top: 10px;
+            font-size: 14px;
+            font-weight: 500;
+            display: none;
+            animation: slideIn 0.3s ease;
+        }
+
+        .toast.show {
+            display: block;
+        }
+
+        .toast.success {
+            background: #166534;
+            color: white;
+        }
+
+        .toast.error {
+            background: #991b1b;
+            color: white;
+        }
+
+        .toast.info {
+            background: #1e40af;
+            color: white;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        /* Loading */
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 40px;
+        }
+
+        .spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid var(--border-color);
+            border-top-color: var(--accent-blue);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Countdown */
+        .countdown {
+            font-family: monospace;
+            font-size: 14px;
+            color: var(--accent-yellow);
+        }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+            .header {
+                flex-direction: column;
+                gap: 15px;
+                text-align: center;
+            }
+
+            .status-row {
+                flex-direction: column;
+                gap: 15px;
+            }
+
+            .proposal-meta {
+                flex-direction: column;
+                gap: 8px;
+            }
+
+            .vote-actions {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>Ralph Voting Portal</h1>
+            <div class="header-right">
+                <button id="walletBtn" class="wallet-btn connect" onclick="connectWallet()">
+                    Connect Wallet
+                </button>
+            </div>
+        </header>
+
+        <div id="statusBar" class="status-bar" style="display: none;">
+            <div class="status-row">
+                <div class="status-item">
+                    <span class="status-label">Connected as</span>
+                    <span id="walletAddress" class="status-value">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Hat Status</span>
+                    <span id="hatStatus" class="hat-badge not-wearer">Checking...</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('active')">Active Proposals</button>
+            <button class="tab" onclick="showTab('history')">Voting History</button>
+        </div>
+
+        <div id="activeTab">
+            <div id="proposalsList">
+                <div class="loading">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="historyTab" style="display: none;">
+            <div id="historyList">
+                <div class="loading">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast-container">
+        <div id="toast" class="toast"></div>
+    </div>
+
+    <script>
+        // State
+        let provider = null;
+        let signer = null;
+        let connectedAddress = null;
+        let canVote = false;
+        let proposals = [];
+
+        // Constants
+        const CHAIN_ID = 8453; // Base mainnet
+
+        // Toast notifications
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast ' + type + ' show';
+            setTimeout(() => toast.classList.remove('show'), 4000);
+        }
+
+        // Tab switching
+        function showTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+
+            document.getElementById('activeTab').style.display = tab === 'active' ? 'block' : 'none';
+            document.getElementById('historyTab').style.display = tab === 'history' ? 'block' : 'none';
+
+            if (tab === 'history') {
+                loadHistory();
+            }
+        }
+
+        // Wallet connection
+        async function connectWallet() {
+            if (typeof window.ethereum === 'undefined') {
+                showToast('Please install MetaMask or another Web3 wallet', 'error');
+                return;
+            }
+
+            try {
+                // Request account access
+                const accounts = await window.ethereum.request({
+                    method: 'eth_requestAccounts'
+                });
+
+                // Check network
+                const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+                if (parseInt(chainId, 16) !== CHAIN_ID) {
+                    try {
+                        await window.ethereum.request({
+                            method: 'wallet_switchEthereumChain',
+                            params: [{ chainId: '0x' + CHAIN_ID.toString(16) }]
+                        });
+                    } catch (switchError) {
+                        showToast('Please switch to Base network', 'error');
+                        return;
+                    }
+                }
+
+                provider = new ethers.BrowserProvider(window.ethereum);
+                signer = await provider.getSigner();
+                connectedAddress = await signer.getAddress();
+
+                // Update UI
+                updateWalletUI();
+                await checkHatStatus();
+                showToast('Wallet connected', 'success');
+
+            } catch (error) {
+                console.error('Connection error:', error);
+                showToast('Failed to connect wallet', 'error');
+            }
+        }
+
+        function updateWalletUI() {
+            const btn = document.getElementById('walletBtn');
+            const statusBar = document.getElementById('statusBar');
+            const addressEl = document.getElementById('walletAddress');
+
+            if (connectedAddress) {
+                const shortAddr = connectedAddress.slice(0, 6) + '...' + connectedAddress.slice(-4);
+                btn.innerHTML = '<span class="dot"></span>' + shortAddr;
+                btn.className = 'wallet-btn connected';
+                btn.onclick = disconnectWallet;
+                statusBar.style.display = 'block';
+                addressEl.textContent = shortAddr;
+            } else {
+                btn.textContent = 'Connect Wallet';
+                btn.className = 'wallet-btn connect';
+                btn.onclick = connectWallet;
+                statusBar.style.display = 'none';
+            }
+        }
+
+        function disconnectWallet() {
+            provider = null;
+            signer = null;
+            connectedAddress = null;
+            canVote = false;
+            updateWalletUI();
+            loadProposals();
+            showToast('Wallet disconnected', 'info');
+        }
+
+        async function checkHatStatus() {
+            if (!connectedAddress) return;
+
+            const statusEl = document.getElementById('hatStatus');
+            statusEl.textContent = 'Checking...';
+            statusEl.className = 'hat-badge';
+
+            try {
+                const res = await fetch('/api/hats/check-wearer/' + connectedAddress);
+                const data = await res.json();
+
+                canVote = data.can_vote;
+
+                if (canVote) {
+                    statusEl.textContent = 'Hat Wearer';
+                    statusEl.className = 'hat-badge wearer';
+                } else {
+                    statusEl.textContent = 'Not a Hat Wearer';
+                    statusEl.className = 'hat-badge not-wearer';
+                }
+
+                // Refresh proposals to update vote buttons
+                loadProposals();
+
+            } catch (error) {
+                console.error('Failed to check hat status:', error);
+                statusEl.textContent = 'Error checking status';
+            }
+        }
+
+        // Load proposals
+        async function loadProposals() {
+            const container = document.getElementById('proposalsList');
+
+            try {
+                const res = await fetch('/api/hats/proposals');
+                const data = await res.json();
+                proposals = data.proposals || [];
+
+                if (proposals.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">&#10003;</div>
+                            <p>No active proposals</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                container.innerHTML = proposals.map(p => renderProposal(p)).join('');
+
+                // Start countdown timers
+                proposals.forEach(p => {
+                    if (p.status === 'pending') {
+                        updateCountdown(p.id, p.deadline);
+                    }
+                });
+
+            } catch (error) {
+                console.error('Failed to load proposals:', error);
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">&#9888;</div>
+                        <p>Failed to load proposals</p>
+                    </div>
+                `;
+            }
+        }
+
+        function renderProposal(p) {
+            const totalVotes = p.yes_votes + p.no_votes;
+            const yesPercent = totalVotes > 0 ? (p.yes_votes / totalVotes) * 100 : 50;
+            const isPending = p.status === 'pending';
+            const canVoteOnThis = isPending && canVote && connectedAddress;
+
+            // Try to get question from content if available
+            const question = p.question || p.content?.question || `Proposal #${p.id}`;
+            const decisionType = p.decision_type || p.content?.decision_type || 'custom';
+
+            return `
+                <div class="proposal-card" data-id="${p.id}">
+                    <div class="proposal-header">
+                        <span class="proposal-id">Proposal #${p.id}</span>
+                        <span class="proposal-status status-${p.status}">${p.status}</span>
+                    </div>
+                    <div class="proposal-question">${escapeHtml(question)}</div>
+                    <div class="proposal-meta">
+                        <span>Type: ${decisionType}</span>
+                        <span id="countdown-${p.id}" class="countdown">
+                            ${isPending ? 'Loading...' : formatDate(p.deadline)}
+                        </span>
+                    </div>
+                    <div class="vote-counts">
+                        <div class="vote-count yes">&#128077; ${p.yes_votes} Yes</div>
+                        <div class="vote-count no">&#128078; ${p.no_votes} No</div>
+                    </div>
+                    <div class="vote-progress">
+                        <div class="vote-progress-bar" style="width: ${yesPercent}%"></div>
+                    </div>
+                    <div class="vote-actions">
+                        <button class="vote-btn yes" onclick="vote(${p.id}, true)"
+                            ${!canVoteOnThis ? 'disabled' : ''}>
+                            Vote Yes
+                        </button>
+                        <button class="vote-btn no" onclick="vote(${p.id}, false)"
+                            ${!canVoteOnThis ? 'disabled' : ''}>
+                            Vote No
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function updateCountdown(proposalId, deadline) {
+            const el = document.getElementById('countdown-' + proposalId);
+            if (!el) return;
+
+            const update = () => {
+                const now = Date.now() / 1000;
+                const remaining = deadline - now;
+
+                if (remaining <= 0) {
+                    el.textContent = 'Voting ended';
+                    el.style.color = 'var(--text-muted)';
+                    return;
+                }
+
+                const minutes = Math.floor(remaining / 60);
+                const seconds = Math.floor(remaining % 60);
+                el.textContent = `${minutes}m ${seconds}s remaining`;
+            };
+
+            update();
+            const interval = setInterval(() => {
+                const remaining = deadline - (Date.now() / 1000);
+                if (remaining <= 0) {
+                    clearInterval(interval);
+                    loadProposals(); // Refresh when expired
+                }
+                update();
+            }, 1000);
+        }
+
+        // Vote function
+        async function vote(proposalId, support) {
+            if (!connectedAddress || !signer) {
+                showToast('Please connect your wallet first', 'error');
+                return;
+            }
+
+            // Disable buttons
+            const card = document.querySelector(`[data-id="${proposalId}"]`);
+            const buttons = card.querySelectorAll('button');
+            buttons.forEach(b => b.disabled = true);
+
+            try {
+                // Get typed data for signing
+                const typedDataRes = await fetch('/api/hats/typed-data', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        proposal_id: proposalId,
+                        support: support,
+                        voter: connectedAddress
+                    })
+                });
+
+                const { typed_data } = await typedDataRes.json();
+
+                // Sign the typed data
+                showToast('Please sign the vote in your wallet...', 'info');
+
+                const signature = await signer.signTypedData(
+                    typed_data.domain,
+                    { Vote: typed_data.types.Vote },
+                    typed_data.message
+                );
+
+                // Submit signed vote
+                const voteRes = await fetch('/api/hats/vote-signed', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        proposal_id: proposalId,
+                        support: support,
+                        voter: connectedAddress,
+                        signature: signature
+                    })
+                });
+
+                const result = await voteRes.json();
+
+                if (voteRes.ok) {
+                    const txInfo = result.tx_hash ? ` (TX: ${result.tx_hash.slice(0, 10)}...)` : '';
+                    showToast('Vote submitted successfully!' + txInfo, 'success');
+                    setTimeout(loadProposals, 2000);
+                } else {
+                    showToast('Vote failed: ' + result.detail, 'error');
+                    buttons.forEach(b => b.disabled = false);
+                }
+
+            } catch (error) {
+                console.error('Vote error:', error);
+                if (error.code === 4001) {
+                    showToast('Signature rejected', 'error');
+                } else {
+                    showToast('Vote failed: ' + error.message, 'error');
+                }
+                buttons.forEach(b => b.disabled = false);
+            }
+        }
+
+        // Load history
+        async function loadHistory() {
+            const container = document.getElementById('historyList');
+
+            try {
+                const res = await fetch('/api/hats/proposals/history?limit=50');
+                const data = await res.json();
+                const history = data.proposals || [];
+
+                if (history.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">&#128203;</div>
+                            <p>No voting history</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                container.innerHTML = `
+                    <table class="history-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Question</th>
+                                <th>Result</th>
+                                <th>Votes</th>
+                                <th>Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${history.map(p => `
+                                <tr>
+                                    <td>#${p.id}</td>
+                                    <td>${escapeHtml(p.question_text || 'Proposal #' + p.id)}</td>
+                                    <td>
+                                        <span class="proposal-status status-${p.status}">
+                                            ${p.status}
+                                        </span>
+                                    </td>
+                                    <td>${p.yes_votes} / ${p.no_votes}</td>
+                                    <td>${formatDate(p.created_at)}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+
+            } catch (error) {
+                console.error('Failed to load history:', error);
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">&#9888;</div>
+                        <p>Failed to load history</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Utility functions
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text || '';
+            return div.innerHTML;
+        }
+
+        function formatDate(timestamp) {
+            if (!timestamp) return '-';
+            const date = typeof timestamp === 'number'
+                ? new Date(timestamp * 1000)
+                : new Date(timestamp);
+            return date.toLocaleString();
+        }
+
+        // Listen for account changes
+        if (window.ethereum) {
+            window.ethereum.on('accountsChanged', (accounts) => {
+                if (accounts.length === 0) {
+                    disconnectWallet();
+                } else {
+                    connectedAddress = accounts[0];
+                    updateWalletUI();
+                    checkHatStatus();
+                }
+            });
+
+            window.ethereum.on('chainChanged', () => {
+                window.location.reload();
+            });
+        }
+
+        // WebSocket for real-time updates
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const ws = new WebSocket(protocol + '//' + window.location.host + '/ws');
+
+            ws.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                if (msg.type === 'vote_cast' || msg.type === 'proposal_created') {
+                    loadProposals();
+                }
+            };
+
+            ws.onclose = () => setTimeout(connectWebSocket, 5000);
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadProposals();
+            setInterval(loadProposals, 30000); // Refresh every 30s
+            try { connectWebSocket(); } catch(e) { console.log('WebSocket not available'); }
+        });
+    </script>
+</body>
+</html>

@@ -51,6 +51,15 @@ docs = [
     "mkdocs-material-extensions>=1.3.1",
     "pymdown-extensions>=10.16.1",
 ]
+
+hats = [
+    "web3>=7.0.0",
+    "eth-account>=0.13.0",
+    "eth-utils>=4.0.0",
+    "python-dotenv>=1.0.0",
+    "aiohttp>=3.9.0",
+]
+
 [project.urls]
 Homepage = "https://mikeyobrien.github.io/ralph-orchestrator/"
 Repository = "https://github.com/mikeyobrien/ralph-orchestrator"

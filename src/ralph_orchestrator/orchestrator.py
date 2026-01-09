@@ -23,6 +23,7 @@ from .metrics import Metrics, CostTracker, IterationStats, TriggerReason
 from .safety import SafetyGuard
 from .context import ContextManager
 from .output import RalphConsole
+from .hats import HatsApprovalManager, DecisionType, ApprovalRequest
 
 # Setup logging
 logging.basicConfig(
@@ -133,10 +134,18 @@ class RalphOrchestrator:
             self.primary_tool = self.current_adapter.name
         else:
             self.current_adapter = self.adapters.get(self.primary_tool)
-        
+
         if not self.current_adapter:
             logger.error(f"DEBUG: primary_tool={self.primary_tool}, adapters={list(self.adapters.keys())}")
             raise ValueError(f"Unknown tool: {self.primary_tool}")
+
+        # Initialize Hats Protocol approval manager if configured
+        self.hats_manager = None
+        if self._config and hasattr(self._config, 'hats_approval'):
+            hats_config = self._config.hats_approval
+            if hats_config.enabled:
+                self.hats_manager = HatsApprovalManager(hats_config)
+                logger.info("Hats approval manager initialized")
         
         # Signal handling - use basic signal registration here
         # The async handlers will be set up when arun() is called
@@ -453,6 +462,18 @@ class RalphOrchestrator:
             if not safety_check.passed:
                 logger.info(f"Safety limit reached: {safety_check.reason}")
                 break
+
+            # Check Hats Protocol approval if configured
+            if self.hats_manager:
+                hats_result = await self._check_hats_approval()
+                if not hats_result.approved:
+                    logger.info(f"Hats approval denied: {hats_result.reason}")
+                    self.console.print_warning(
+                        f"Iteration blocked by hat wearers: {hats_result.reason}"
+                    )
+                    # Wait before retrying to avoid spam
+                    await asyncio.sleep(self._config.hats_approval.poll_interval or 10)
+                    continue
 
             # Check for explicit completion marker in prompt
             if self._check_completion_marker():
@@ -986,5 +1007,88 @@ class RalphOrchestrator:
             'cost': {
                 'total': self.cost_tracker.total_cost if self.cost_tracker else 0,
                 'limit': self.max_cost if self.track_costs else None
+            },
+            'hats_approval': {
+                'enabled': self.hats_manager is not None,
+                'pending_proposals': len(self.hats_manager.get_pending_proposals()) if self.hats_manager else 0,
             }
         }
+
+    async def _check_hats_approval(self):
+        """Check for Hats Protocol approval before iteration.
+
+        Checks both iteration approval and cost threshold approval.
+
+        Returns:
+            ApprovalResult with approval status
+        """
+        from .hats import ApprovalResult
+
+        if not self.hats_manager:
+            return ApprovalResult(approved=True, reason="Hats approval not enabled")
+
+        # Check cost threshold approval first
+        cost_result = await self._check_cost_threshold_approval()
+        if not cost_result.approved:
+            return cost_result
+
+        # Check iteration approval if configured
+        if self.hats_manager.is_decision_type_configured(DecisionType.ITERATION_APPROVAL):
+            request = ApprovalRequest(
+                decision_type=DecisionType.ITERATION_APPROVAL,
+                question=f"Approve iteration {self.metrics.iterations + 1} to proceed?",
+                context={
+                    "iteration": self.metrics.iterations + 1,
+                    "successful_iterations": self.metrics.successful_iterations,
+                    "failed_iterations": self.metrics.failed_iterations,
+                    "current_cost": self.cost_tracker.total_cost if self.cost_tracker else 0,
+                },
+            )
+            return await self.hats_manager.request_approval(request)
+
+        # No iteration approval configured - auto-approve
+        return ApprovalResult(approved=True, reason="No iteration approval required")
+
+    async def _check_cost_threshold_approval(self):
+        """Check if cost has exceeded threshold requiring approval.
+
+        Returns:
+            ApprovalResult with approval status
+        """
+        from .hats import ApprovalResult
+
+        if not self.hats_manager or not self.cost_tracker:
+            return ApprovalResult(approved=True, reason="Cost tracking not enabled")
+
+        current_cost = self.cost_tracker.total_cost
+        threshold = self._config.hats_approval.cost_threshold_trigger if self._config else 10.0
+
+        # Only check if cost threshold decision type is configured
+        if not self.hats_manager.is_decision_type_configured(DecisionType.COST_THRESHOLD):
+            return ApprovalResult(approved=True, reason="Cost threshold approval not configured")
+
+        # Check if we've already approved this cost level
+        # (avoid asking repeatedly for same threshold)
+        if not hasattr(self, '_last_approved_cost'):
+            self._last_approved_cost = 0.0
+
+        if current_cost >= threshold and current_cost > self._last_approved_cost:
+            request = ApprovalRequest(
+                decision_type=DecisionType.COST_THRESHOLD,
+                question=f"Cost has reached ${current_cost:.2f} (threshold: ${threshold:.2f}). "
+                f"Continue execution?",
+                context={
+                    "current_cost": current_cost,
+                    "threshold": threshold,
+                    "iteration": self.metrics.iterations,
+                },
+            )
+            result = await self.hats_manager.request_approval(request)
+
+            if result.approved:
+                # Update last approved cost to avoid asking again
+                self._last_approved_cost = current_cost + threshold
+
+            return result
+
+        return ApprovalResult(approved=True, reason="Cost within threshold")
