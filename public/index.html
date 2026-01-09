@@ -25,7 +25,7 @@
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
-            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
             background: var(--bg-primary);
             color: var(--text-primary);
             min-height: 100vh;
@@ -160,17 +160,24 @@
             border: 1px solid var(--border-color);
         }
 
-        .live-task {
-            font-size: 16px;
-            font-weight: 500;
+        .live-task-header {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: var(--accent-blue);
+        }
+
+        .live-task-summary {
+            font-size: 14px;
+            color: var(--text-secondary);
             margin-bottom: 16px;
-            color: var(--text-primary);
+            line-height: 1.7;
         }
 
         .live-stats {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-            gap: 16px;
+            gap: 12px;
             margin-bottom: 16px;
         }
 
@@ -181,34 +188,55 @@
             border: 1px solid var(--border-color);
         }
 
-        .live-stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
-        .live-stat-value { font-size: 18px; font-weight: 600; color: var(--text-primary); margin-top: 4px; }
+        .live-stat-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .live-stat-value { font-size: 16px; font-weight: 600; color: var(--text-primary); margin-top: 4px; }
         .live-stat-value.cost { color: var(--accent-yellow); }
         .live-stat-value.success { color: var(--accent-green); }
 
-        .live-context {
+        .task-details {
             background: var(--bg-tertiary);
             border-radius: 8px;
             padding: 16px;
-            font-size: 13px;
             border: 1px solid var(--border-color);
+            margin-top: 16px;
         }
 
-        .live-context-title {
+        .task-details-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .task-details-title {
             font-size: 11px;
             color: var(--text-muted);
             text-transform: uppercase;
             letter-spacing: 0.5px;
-            margin-bottom: 8px;
         }
 
-        .live-context pre {
+        .task-details-toggle {
+            font-size: 12px;
+            color: var(--accent-blue);
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-family: inherit;
+        }
+
+        .task-details-content {
+            font-size: 13px;
+            color: var(--text-secondary);
             white-space: pre-wrap;
             word-break: break-word;
-            color: var(--text-secondary);
+            max-height: 300px;
+            overflow-y: auto;
             font-family: inherit;
-            margin: 0;
         }
+
+        .task-details-content::-webkit-scrollbar { width: 6px; }
+        .task-details-content::-webkit-scrollbar-track { background: var(--bg-primary); }
+        .task-details-content::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
 
         /* Section Headers */
         .section-header {
@@ -283,11 +311,17 @@
         .status-rejected { background: rgba(248, 113, 113, 0.2); color: var(--accent-red); }
         .status-expired { background: rgba(102, 102, 102, 0.2); color: var(--text-muted); }
 
+        .proposal-task-name {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: var(--accent-blue);
+        }
+
         .proposal-question {
-            font-size: 15px;
-            font-weight: 500;
+            font-size: 14px;
             margin-bottom: 12px;
-            color: var(--text-primary);
+            color: var(--text-secondary);
         }
 
         .proposal-context {
@@ -300,7 +334,7 @@
 
         .context-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
             gap: 12px;
         }
 
@@ -348,14 +382,15 @@
 
         .vote-stats {
             display: flex;
-            gap: 16px;
+            gap: 12px;
+            align-items: center;
             flex: 1;
         }
 
         .vote-stat {
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 4px;
             font-size: 14px;
             font-weight: 600;
         }
@@ -369,7 +404,7 @@
             background: var(--bg-tertiary);
             border-radius: 2px;
             overflow: hidden;
-            min-width: 100px;
+            min-width: 80px;
         }
 
         .vote-bar-fill {
@@ -399,6 +434,13 @@
         .vote-btn.yes:hover:not(:disabled) { background: #22c55e; }
         .vote-btn.no { background: var(--accent-red); color: #000; }
         .vote-btn.no:hover:not(:disabled) { background: #ef4444; }
+
+        .ipfs-link {
+            font-size: 11px;
+            color: var(--accent-purple);
+            text-decoration: none;
+        }
+        .ipfs-link:hover { text-decoration: underline; }
 
         .empty-state {
             text-align: center;
@@ -436,6 +478,45 @@
             .vote-actions { width: 100%; }
             .vote-btn { flex: 1; }
         }
+
+        /* IPFS CID Input */
+        .ipfs-input-section {
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 16px;
+            border: 1px solid var(--border-color);
+        }
+
+        .ipfs-input-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .ipfs-input {
+            flex: 1;
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 12px;
+        }
+
+        .ipfs-input::placeholder { color: var(--text-muted); }
+
+        .ipfs-fetch-btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: none;
+            background: var(--accent-purple);
+            color: #000;
+            font-family: inherit;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -458,28 +539,39 @@
                 <span class="live-title">Ralph Agent Status</span>
             </div>
             <div class="live-content">
-                <div id="liveTask" class="live-task">Waiting for proposals...</div>
+                <div id="liveTaskHeader" class="live-task-header">Waiting for proposals...</div>
+                <div id="liveTaskSummary" class="live-task-summary" style="display: none;"></div>
                 <div id="liveStats" class="live-stats" style="display: none;">
                     <div class="live-stat">
                         <div class="live-stat-label">Iteration</div>
                         <div id="statIteration" class="live-stat-value">-</div>
                     </div>
                     <div class="live-stat">
-                        <div class="live-stat-label">Success Rate</div>
+                        <div class="live-stat-label">Success</div>
                         <div id="statSuccess" class="live-stat-value success">-</div>
                     </div>
                     <div class="live-stat">
-                        <div class="live-stat-label">Current Cost</div>
+                        <div class="live-stat-label">Cost</div>
                         <div id="statCost" class="live-stat-value cost">-</div>
                     </div>
                     <div class="live-stat">
-                        <div class="live-stat-label">Decision Type</div>
-                        <div id="statDecision" class="live-stat-value">-</div>
+                        <div class="live-stat-label">Time Left</div>
+                        <div id="statTime" class="live-stat-value">-</div>
                     </div>
                 </div>
-                <div id="liveContext" class="live-context" style="display: none;">
-                    <div class="live-context-title">Current Task</div>
-                    <pre id="contextContent">-</pre>
+                <div id="taskDetails" class="task-details" style="display: none;">
+                    <div class="task-details-header">
+                        <span class="task-details-title">Full Task Prompt</span>
+                        <button class="task-details-toggle" onclick="toggleTaskDetails()">Collapse</button>
+                    </div>
+                    <div id="taskDetailsContent" class="task-details-content"></div>
+                </div>
+                <div class="ipfs-input-section">
+                    <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">Load proposal context from IPFS:</div>
+                    <div class="ipfs-input-row">
+                        <input type="text" id="ipfsCidInput" class="ipfs-input" placeholder="Enter IPFS CID (e.g., QmXxx...)">
+                        <button class="ipfs-fetch-btn" onclick="fetchIPFSManual()">Load</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -508,7 +600,6 @@
         const CHAIN_ID = 8453;
         const RPC_URL = 'https://base.publicnode.com';
         const IPFS_GATEWAY = 'https://gateway.pinata.cloud/ipfs';
-        const HATS_SUBGRAPH = 'https://api.thegraph.com/subgraphs/name/hats-protocol/hats-v1-base';
 
         // Contract ABI
         const CONTRACT_ABI = [
@@ -530,8 +621,9 @@
         let connectedAddress = null;
         let contract = null;
         let hatsContract = null;
-        let ipfsCache = {};
+        let currentIPFSContent = null;
         let hatWearerCounts = {};
+        let taskDetailsExpanded = true;
 
         function showToast(message, type = 'info') {
             const toast = document.getElementById('toast');
@@ -580,30 +672,46 @@
             }
         }
 
-        async function fetchIPFSContent(questionHash) {
-            // Try to find IPFS CID from recent ProposalCreated events or use a mapping
-            // For now, we'll try common patterns based on the question hash
-            // In production, you'd index events or store CID mappings
-
-            // Check cache
-            if (ipfsCache[questionHash]) {
-                return ipfsCache[questionHash];
-            }
-
+        async function fetchIPFSContent(cid) {
             try {
-                // Try to fetch from a known API or indexed source
-                // For demo, return null - real impl would query event logs
-                return null;
+                const response = await fetch(`${IPFS_GATEWAY}/${cid}`);
+                if (!response.ok) throw new Error('Failed to fetch');
+                return await response.json();
             } catch (e) {
-                console.log('Could not fetch IPFS content');
+                console.log('Could not fetch IPFS content:', e);
                 return null;
             }
         }
 
-        async function getHatWearerCount(hatId) {
-            if (hatWearerCounts[hatId]) {
-                return hatWearerCounts[hatId];
+        async function fetchIPFSManual() {
+            const input = document.getElementById('ipfsCidInput');
+            const cid = input.value.trim();
+            if (!cid) {
+                showToast('Please enter an IPFS CID', 'error');
+                return;
             }
+
+            showToast('Fetching IPFS content...', 'info');
+            const content = await fetchIPFSContent(cid);
+            if (content) {
+                currentIPFSContent = content;
+                updateLiveSectionWithIPFS(content);
+                showToast('IPFS content loaded!', 'success');
+            } else {
+                showToast('Failed to load IPFS content', 'error');
+            }
+        }
+
+        function toggleTaskDetails() {
+            const content = document.getElementById('taskDetailsContent');
+            const btn = document.querySelector('.task-details-toggle');
+            taskDetailsExpanded = !taskDetailsExpanded;
+            content.style.display = taskDetailsExpanded ? 'block' : 'none';
+            btn.textContent = taskDetailsExpanded ? 'Collapse' : 'Expand';
+        }
+
+        async function getHatWearerCount(hatId) {
+            if (hatWearerCounts[hatId]) return hatWearerCounts[hatId];
 
             try {
                 const readProvider = new ethers.JsonRpcProvider(RPC_URL);
@@ -674,7 +782,7 @@
 
                 proposals.sort((a, b) => b.id - a.id);
 
-                // Update live section with most recent active proposal
+                // Update live section
                 const activeProposal = proposals.find(p => p.isActive);
                 updateLiveSection(activeProposal);
 
@@ -686,10 +794,9 @@
 
                 container.innerHTML = proposals.map(p => renderProposal(p)).join('');
 
-                // Start countdown timers and load IPFS content
+                // Start countdown timers
                 proposals.forEach(p => {
                     if (p.isActive) updateCountdown(p.id, p.deadline);
-                    loadProposalIPFS(p.id, p.questionHash);
                 });
 
             } catch (error) {
@@ -698,64 +805,108 @@
             }
         }
 
-        async function loadProposalIPFS(proposalId, questionHash) {
-            // Try to fetch IPFS content by querying events
-            try {
-                const readProvider = new ethers.JsonRpcProvider(RPC_URL);
-                const readContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, readProvider);
-
-                // Get ProposalCreated events for this proposal
-                const filter = readContract.filters.ProposalCreated(proposalId);
-                const events = await readContract.queryFilter(filter, -10000);
-
-                if (events.length > 0) {
-                    // The IPFS CID might be in the transaction data or indexed elsewhere
-                    // For now, try to derive from the event
-                    console.log('Found event for proposal', proposalId, events[0]);
-                }
-            } catch (e) {
-                console.log('Could not load IPFS for proposal', proposalId);
-            }
-        }
-
         function updateLiveSection(activeProposal) {
             const indicator = document.getElementById('liveIndicator');
             const statusEl = document.getElementById('liveStatus');
-            const taskEl = document.getElementById('liveTask');
+            const taskHeader = document.getElementById('liveTaskHeader');
+            const taskSummary = document.getElementById('liveTaskSummary');
             const statsEl = document.getElementById('liveStats');
-            const contextEl = document.getElementById('liveContext');
+            const taskDetails = document.getElementById('taskDetails');
 
             if (activeProposal) {
                 indicator.className = 'live-indicator';
                 statusEl.textContent = 'AWAITING VOTE';
-                taskEl.textContent = `Proposal #${activeProposal.id}: Should Ralph proceed with the next iteration?`;
                 statsEl.style.display = 'grid';
 
-                // Set stats (these would come from IPFS content in production)
-                document.getElementById('statIteration').textContent = activeProposal.id;
-                document.getElementById('statSuccess').textContent = `${Math.round((activeProposal.yesVotes / Math.max(1, activeProposal.yesVotes + activeProposal.noVotes)) * 100)}%`;
-                document.getElementById('statCost').textContent = '$0.00';
-                document.getElementById('statDecision').textContent = 'Iteration';
+                // If we have IPFS content, show it
+                if (currentIPFSContent) {
+                    updateLiveSectionWithIPFS(currentIPFSContent);
+                } else {
+                    taskHeader.textContent = `Proposal #${activeProposal.id}: Iteration Approval`;
+                    taskSummary.style.display = 'none';
+                    taskDetails.style.display = 'none';
+                }
 
-                contextEl.style.display = 'block';
-                document.getElementById('contextContent').textContent =
-                    `Decision Type: iteration_approval\n` +
-                    `Hat ID: ${activeProposal.hatId.slice(0, 20)}...\n` +
-                    `Creator: ${activeProposal.creator}\n` +
-                    `Deadline: ${new Date(activeProposal.deadline * 1000).toLocaleString()}`;
+                document.getElementById('statIteration').textContent = activeProposal.id;
+                document.getElementById('statSuccess').textContent = `${activeProposal.yesVotes}/${activeProposal.yesVotes + activeProposal.noVotes}`;
+                document.getElementById('statCost').textContent = '$0.00';
+
+                // Update time countdown
+                updateLiveCountdown(activeProposal.deadline);
             } else {
                 indicator.className = 'live-indicator idle';
                 statusEl.textContent = 'IDLE';
-                taskEl.textContent = 'No active proposals. Ralph is either paused or waiting for the next task.';
+                taskHeader.textContent = 'No active proposals. Ralph is either paused or waiting for the next task.';
+                taskSummary.style.display = 'none';
                 statsEl.style.display = 'none';
-                contextEl.style.display = 'none';
+                taskDetails.style.display = 'none';
             }
+        }
+
+        function updateLiveSectionWithIPFS(content) {
+            const taskHeader = document.getElementById('liveTaskHeader');
+            const taskSummary = document.getElementById('liveTaskSummary');
+            const taskDetails = document.getElementById('taskDetails');
+            const taskDetailsContent = document.getElementById('taskDetailsContent');
+
+            if (content.context) {
+                // Show task summary
+                if (content.context.task_summary) {
+                    taskHeader.textContent = content.context.task_summary;
+                }
+
+                // Show iteration info
+                if (content.context.iteration) {
+                    document.getElementById('statIteration').textContent = content.context.iteration;
+                }
+
+                // Show cost
+                if (content.context.current_cost !== undefined) {
+                    document.getElementById('statCost').textContent = `$${content.context.current_cost.toFixed(2)}`;
+                }
+
+                // Show success rate
+                const success = content.context.successful_iterations || 0;
+                const failed = content.context.failed_iterations || 0;
+                document.getElementById('statSuccess').textContent = `${success}/${success + failed}`;
+
+                // Show full task prompt
+                if (content.context.task_prompt) {
+                    taskSummary.textContent = `Question: ${content.question}`;
+                    taskSummary.style.display = 'block';
+
+                    taskDetailsContent.textContent = content.context.task_prompt;
+                    taskDetails.style.display = 'block';
+                }
+            }
+        }
+
+        function updateLiveCountdown(deadline) {
+            const el = document.getElementById('statTime');
+            const update = () => {
+                const remaining = deadline - Math.floor(Date.now() / 1000);
+                if (remaining <= 0) {
+                    el.textContent = 'Ended';
+                    return false;
+                }
+                const minutes = Math.floor(remaining / 60);
+                const seconds = Math.floor(remaining % 60);
+                el.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                return true;
+            };
+            update();
+            const interval = setInterval(() => {
+                if (!update()) clearInterval(interval);
+            }, 1000);
         }
 
         function renderProposal(p) {
             const totalVotes = p.yesVotes + p.noVotes;
             const yesPercent = totalVotes > 0 ? (p.yesVotes / totalVotes) * 100 : 50;
             const canVoteOnThis = p.isActive && connectedAddress;
+
+            // Get task name from IPFS content if available
+            const taskName = currentIPFSContent?.context?.task_summary || 'Iteration Approval';
 
             return `
                 <div class="proposal-card ${p.isActive ? 'active' : ''}" data-id="${p.id}">
@@ -764,35 +915,30 @@
                             <span class="proposal-id">#${p.id}</span>
                             <span class="proposal-status status-${p.status}">${p.status}</span>
                         </div>
-                        ${p.wearerCount ? `<div class="hat-info">&#127913; ${p.wearerCount} eligible voter${p.wearerCount !== 1 ? 's' : ''}</div>` : ''}
+                        ${p.wearerCount ? `<div class="hat-info">&#127913; ${p.wearerCount} voter${p.wearerCount !== 1 ? 's' : ''}</div>` : ''}
                     </div>
 
+                    <div class="proposal-task-name">${escapeHtml(taskName)}</div>
                     <div class="proposal-question">Should Ralph proceed with iteration ${p.id}?</div>
 
                     <div class="proposal-context">
                         <div class="context-grid">
                             <div class="context-item">
-                                <span class="context-label">Decision Type</span>
-                                <span class="context-value">Iteration Approval</span>
+                                <span class="context-label">Type</span>
+                                <span class="context-value">Iteration</span>
+                            </div>
+                            <div class="context-item">
+                                <span class="context-label">Votes</span>
+                                <span class="context-value">${totalVotes}/${p.wearerCount || '?'}</span>
                             </div>
                             <div class="context-item">
                                 <span class="context-label">Creator</span>
-                                <span class="context-value">${p.creator ? p.creator.slice(0, 8) + '...' : 'Unknown'}</span>
+                                <span class="context-value">${p.creator ? p.creator.slice(0, 6) + '...' : '-'}</span>
                             </div>
                             <div class="context-item">
-                                <span class="context-label">Required Hat</span>
-                                <span class="context-value">${p.hatId.slice(0, 12)}...</span>
+                                <span class="context-label">Deadline</span>
+                                <span id="countdown-${p.id}" class="context-value countdown">${p.isActive ? '-' : formatTime(p.deadline)}</span>
                             </div>
-                            <div class="context-item">
-                                <span class="context-label">Participation</span>
-                                <span class="context-value">${totalVotes}/${p.wearerCount || '?'} votes</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="proposal-meta">
-                        <div class="meta-item">
-                            <span id="countdown-${p.id}" class="countdown">${p.isActive ? 'Loading...' : formatDate(p.deadline)}</span>
                         </div>
                     </div>
 
@@ -820,13 +966,12 @@
             const update = () => {
                 const remaining = deadline - Math.floor(Date.now() / 1000);
                 if (remaining <= 0) {
-                    el.textContent = 'Voting ended';
-                    el.style.color = 'var(--text-muted)';
+                    el.textContent = 'Ended';
                     return false;
                 }
                 const minutes = Math.floor(remaining / 60);
                 const seconds = Math.floor(remaining % 60);
-                el.textContent = `${minutes}m ${seconds}s remaining`;
+                el.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
                 return true;
             };
 
@@ -852,9 +997,9 @@
             try {
                 showToast('Submitting vote on-chain...', 'info');
                 const tx = await contract.vote(proposalId, support);
-                showToast('Transaction submitted, waiting for confirmation...', 'info');
+                showToast('Transaction submitted, waiting...', 'info');
                 await tx.wait();
-                showToast('Vote recorded successfully!', 'success');
+                showToast('Vote recorded!', 'success');
                 setTimeout(loadProposals, 2000);
             } catch (error) {
                 console.error('Vote error:', error);
@@ -863,7 +1008,7 @@
                 } else if (error.message.includes('NotHatWearer')) {
                     showToast('You must wear the required hat to vote', 'error');
                 } else if (error.message.includes('AlreadyVoted')) {
-                    showToast('You have already voted on this proposal', 'error');
+                    showToast('Already voted on this proposal', 'error');
                 } else {
                     showToast('Vote failed: ' + (error.reason || error.message), 'error');
                 }
@@ -871,8 +1016,14 @@
             }
         }
 
-        function formatDate(timestamp) {
-            return new Date(timestamp * 1000).toLocaleString();
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text || '';
+            return div.innerHTML;
+        }
+
+        function formatTime(timestamp) {
+            return new Date(timestamp * 1000).toLocaleTimeString();
         }
 
         // Event listeners
@@ -887,7 +1038,7 @@
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
             loadProposals();
-            setInterval(loadProposals, 15000); // Refresh every 15 seconds
+            setInterval(loadProposals, 10000);
         });
     </script>
 </body>

@@ -1034,6 +1034,18 @@ class RalphOrchestrator:
 
         # Check iteration approval if configured
         if self.hats_manager.is_decision_type_configured(DecisionType.ITERATION_APPROVAL):
+            # Get task/prompt content for context
+            task_content = None
+            task_summary = None
+            if self.prompt_file and self.prompt_file.exists():
+                try:
+                    task_content = self.prompt_file.read_text()
+                    # Extract first line as summary (usually the title)
+                    lines = task_content.strip().split('\n')
+                    task_summary = lines[0].replace('#', '').strip() if lines else "Unknown task"
+                except Exception:
+                    pass
+
             request = ApprovalRequest(
                 decision_type=DecisionType.ITERATION_APPROVAL,
                 question=f"Approve iteration {self.metrics.iterations + 1} to proceed?",
@@ -1042,6 +1054,8 @@ class RalphOrchestrator:
                     "successful_iterations": self.metrics.successful_iterations,
                     "failed_iterations": self.metrics.failed_iterations,
                     "current_cost": self.cost_tracker.total_cost if self.cost_tracker else 0,
+                    "task_summary": task_summary,
+                    "task_prompt": task_content,
                 },
             )
             return await self.hats_manager.request_approval(request)
