@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "buildCommand": "",
+  "outputDirectory": "public",
+  "routes": [
+    {
+      "src": "/api/proposals",
+      "dest": "/api/proposals.py"
+    },
+    {
+      "src": "/api/vote",
+      "dest": "/api/vote.py"
+    },
+    {
+      "src": "/api/ipfs/(.*)",
+      "dest": "/api/ipfs/[cid].py"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ]
+}

@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ralph - Hats Voting Portal</title>
+    <script src="https://cdn.jsdelivr.net/npm/ethers@6.9.0/dist/ethers.umd.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0f0f0f;
+            --bg-secondary: #1a1a1a;
+            --bg-tertiary: #252525;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0a0;
+            --text-muted: #666666;
+            --accent-green: #4ade80;
+            --accent-red: #f87171;
+            --accent-yellow: #fbbf24;
+            --accent-blue: #60a5fa;
+            --border-color: #333333;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+
+        .container { max-width: 900px; margin: 0 auto; padding: 20px; }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 0;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 30px;
+        }
+
+        .header h1 { font-size: 24px; font-weight: 600; }
+
+        .wallet-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .wallet-btn.connect { background: var(--accent-blue); color: white; }
+        .wallet-btn.connect:hover { background: #3b82f6; }
+        .wallet-btn.connected {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+        .wallet-btn .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-green); }
+
+        .status-bar {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border: 1px solid var(--border-color);
+        }
+
+        .status-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; }
+        .status-item { display: flex; align-items: center; gap: 10px; }
+        .status-label { color: var(--text-secondary); font-size: 14px; }
+        .status-value { font-weight: 600; }
+
+        .hat-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .hat-badge.wearer { background: rgba(74, 222, 128, 0.2); color: var(--accent-green); }
+        .hat-badge.not-wearer { background: rgba(248, 113, 113, 0.2); color: var(--accent-red); }
+
+        .proposal-card {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 16px;
+            border: 1px solid var(--border-color);
+        }
+
+        .proposal-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+        .proposal-id { color: var(--text-muted); font-size: 13px; font-weight: 500; }
+
+        .proposal-status {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-active { background: var(--accent-yellow); color: #000; }
+        .status-approved { background: var(--accent-green); color: #000; }
+        .status-rejected { background: var(--accent-red); color: #000; }
+        .status-expired { background: var(--text-muted); color: #000; }
+
+        .proposal-question { font-size: 18px; font-weight: 500; margin-bottom: 12px; }
+        .proposal-meta { display: flex; gap: 24px; margin-bottom: 16px; font-size: 14px; color: var(--text-secondary); flex-wrap: wrap; }
+
+        .vote-counts { display: flex; gap: 24px; margin-bottom: 20px; }
+        .vote-count { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; }
+        .vote-count.yes { color: var(--accent-green); }
+        .vote-count.no { color: var(--accent-red); }
+
+        .vote-progress { height: 6px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden; margin-bottom: 20px; }
+        .vote-progress-bar { height: 100%; background: var(--accent-green); transition: width 0.3s; }
+
+        .vote-actions { display: flex; gap: 12px; }
+
+        .vote-btn {
+            flex: 1;
+            padding: 14px 24px;
+            border-radius: 8px;
+            border: none;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .vote-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .vote-btn.yes { background: var(--accent-green); color: #000; }
+        .vote-btn.yes:hover:not(:disabled) { background: #22c55e; }
+        .vote-btn.no { background: var(--accent-red); color: #000; }
+        .vote-btn.no:hover:not(:disabled) { background: #ef4444; }
+
+        .empty-state { text-align: center; padding: 60px 20px; color: var(--text-muted); }
+        .empty-state-icon { font-size: 48px; margin-bottom: 16px; }
+
+        .loading { display: flex; justify-content: center; align-items: center; padding: 40px; }
+        .spinner { width: 32px; height: 32px; border: 3px solid var(--border-color); border-top-color: var(--accent-blue); border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .countdown { font-family: monospace; font-size: 14px; color: var(--accent-yellow); }
+
+        .toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 1000; }
+        .toast { padding: 16px 20px; border-radius: 8px; margin-top: 10px; font-size: 14px; font-weight: 500; display: none; animation: slideIn 0.3s ease; }
+        .toast.show { display: block; }
+        .toast.success { background: #166534; color: white; }
+        .toast.error { background: #991b1b; color: white; }
+        .toast.info { background: #1e40af; color: white; }
+        @keyframes slideIn { from { transform: translateX(100px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+        .ipfs-content { background: var(--bg-tertiary); border-radius: 8px; padding: 16px; margin: 16px 0; font-size: 14px; }
+        .ipfs-content pre { white-space: pre-wrap; word-break: break-word; }
+
+        @media (max-width: 600px) {
+            .header { flex-direction: column; gap: 15px; }
+            .status-row { flex-direction: column; }
+            .vote-actions { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>Ralph Voting Portal</h1>
+            <button id="walletBtn" class="wallet-btn connect" onclick="connectWallet()">Connect Wallet</button>
+        </header>
+
+        <div id="statusBar" class="status-bar" style="display: none;">
+            <div class="status-row">
+                <div class="status-item">
+                    <span class="status-label">Connected as</span>
+                    <span id="walletAddress" class="status-value">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Network</span>
+                    <span class="status-value">Base</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="proposalsList">
+            <div class="loading"><div class="spinner"></div></div>
+        </div>
+    </div>
+
+    <div class="toast-container">
+        <div id="toast" class="toast"></div>
+    </div>
+
+    <script>
+        // Contract configuration
+        const CONTRACT_ADDRESS = '0x5c63baF1501B9c50dA4a9e1A38BeC430a2b3d4Df';
+        const CHAIN_ID = 8453;
+        const RPC_URL = 'https://base.publicnode.com';
+        const IPFS_GATEWAY = 'https://gateway.pinata.cloud/ipfs';
+
+        // Contract ABI (minimal)
+        const CONTRACT_ABI = [
+            'function proposalCount() view returns (uint256)',
+            'function getProposal(uint256) view returns (uint256 id, string question, uint256 requiredHatId, uint256 deadline, uint256 yesVotes, uint256 noVotes, bool executed, string ipfsCid)',
+            'function vote(uint256 proposalId, bool support)',
+            'function hasVoted(uint256 proposalId, address voter) view returns (bool)'
+        ];
+
+        const HATS_ABI = [
+            'function isWearerOfHat(address account, uint256 hatId) view returns (bool)'
+        ];
+        const HATS_ADDRESS = '0x3bc1A0Ad72417f2d411118085256fC53CBdDd137';
+
+        let provider = null;
+        let signer = null;
+        let connectedAddress = null;
+        let contract = null;
+        let hatsContract = null;
+
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast ' + type + ' show';
+            setTimeout(() => toast.classList.remove('show'), 4000);
+        }
+
+        async function connectWallet() {
+            if (!window.ethereum) {
+                showToast('Please install MetaMask', 'error');
+                return;
+            }
+
+            try {
+                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+
+                if (parseInt(chainId, 16) !== CHAIN_ID) {
+                    await window.ethereum.request({
+                        method: 'wallet_switchEthereumChain',
+                        params: [{ chainId: '0x' + CHAIN_ID.toString(16) }]
+                    });
+                }
+
+                provider = new ethers.BrowserProvider(window.ethereum);
+                signer = await provider.getSigner();
+                connectedAddress = await signer.getAddress();
+                contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+                hatsContract = new ethers.Contract(HATS_ADDRESS, HATS_ABI, provider);
+
+                updateWalletUI();
+                loadProposals();
+                showToast('Wallet connected', 'success');
+            } catch (error) {
+                console.error('Connection error:', error);
+                showToast('Failed to connect: ' + error.message, 'error');
+            }
+        }
+
+        function updateWalletUI() {
+            const btn = document.getElementById('walletBtn');
+            const statusBar = document.getElementById('statusBar');
+            const addressEl = document.getElementById('walletAddress');
+
+            if (connectedAddress) {
+                const shortAddr = connectedAddress.slice(0, 6) + '...' + connectedAddress.slice(-4);
+                btn.innerHTML = '<span class="dot"></span>' + shortAddr;
+                btn.className = 'wallet-btn connected';
+                statusBar.style.display = 'block';
+                addressEl.textContent = shortAddr;
+            }
+        }
+
+        async function loadProposals() {
+            const container = document.getElementById('proposalsList');
+
+            try {
+                // Use read-only provider
+                const readProvider = new ethers.JsonRpcProvider(RPC_URL);
+                const readContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, readProvider);
+
+                const count = await readContract.proposalCount();
+                const currentTime = Math.floor(Date.now() / 1000);
+
+                if (count === 0n) {
+                    container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">&#10003;</div><p>No proposals yet</p></div>';
+                    return;
+                }
+
+                const proposals = [];
+                const start = Math.max(1, Number(count) - 19);
+
+                for (let i = start; i <= Number(count); i++) {
+                    try {
+                        const p = await readContract.getProposal(i);
+                        const isActive = Number(p[3]) > currentTime && !p[6];
+
+                        let status = 'expired';
+                        if (isActive) status = 'active';
+                        else if (p[6]) status = Number(p[4]) > Number(p[5]) ? 'approved' : 'rejected';
+
+                        proposals.push({
+                            id: Number(p[0]),
+                            question: p[1],
+                            hatId: p[2].toString(),
+                            deadline: Number(p[3]),
+                            yesVotes: Number(p[4]),
+                            noVotes: Number(p[5]),
+                            executed: p[6],
+                            ipfsCid: p[7],
+                            isActive,
+                            status
+                        });
+                    } catch (e) {
+                        console.error('Error loading proposal', i, e);
+                    }
+                }
+
+                proposals.sort((a, b) => b.id - a.id);
+                container.innerHTML = proposals.map(p => renderProposal(p)).join('');
+
+                // Start countdown timers
+                proposals.forEach(p => {
+                    if (p.isActive) updateCountdown(p.id, p.deadline);
+                    if (p.ipfsCid) loadIPFSContent(p.id, p.ipfsCid);
+                });
+
+            } catch (error) {
+                console.error('Failed to load proposals:', error);
+                container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">&#9888;</div><p>Failed to load proposals</p></div>';
+            }
+        }
+
+        function renderProposal(p) {
+            const totalVotes = p.yesVotes + p.noVotes;
+            const yesPercent = totalVotes > 0 ? (p.yesVotes / totalVotes) * 100 : 50;
+            const canVoteOnThis = p.isActive && connectedAddress;
+
+            return `
+                <div class="proposal-card" data-id="${p.id}">
+                    <div class="proposal-header">
+                        <span class="proposal-id">Proposal #${p.id}</span>
+                        <span class="proposal-status status-${p.status}">${p.status}</span>
+                    </div>
+                    <div class="proposal-question">${escapeHtml(p.question)}</div>
+                    <div class="proposal-meta">
+                        <span id="countdown-${p.id}" class="countdown">${p.isActive ? 'Loading...' : formatDate(p.deadline)}</span>
+                        ${p.ipfsCid ? `<span>IPFS: ${p.ipfsCid.slice(0, 12)}...</span>` : ''}
+                    </div>
+                    <div id="ipfs-content-${p.id}" class="ipfs-content" style="display: none;"></div>
+                    <div class="vote-counts">
+                        <div class="vote-count yes">&#128077; ${p.yesVotes} Yes</div>
+                        <div class="vote-count no">&#128078; ${p.noVotes} No</div>
+                    </div>
+                    <div class="vote-progress">
+                        <div class="vote-progress-bar" style="width: ${yesPercent}%"></div>
+                    </div>
+                    <div class="vote-actions">
+                        <button class="vote-btn yes" onclick="vote(${p.id}, true)" ${!canVoteOnThis ? 'disabled' : ''}>Vote Yes</button>
+                        <button class="vote-btn no" onclick="vote(${p.id}, false)" ${!canVoteOnThis ? 'disabled' : ''}>Vote No</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function loadIPFSContent(proposalId, cid) {
+            try {
+                const response = await fetch(`${IPFS_GATEWAY}/${cid}`);
+                if (!response.ok) return;
+
+                const content = await response.json();
+                const container = document.getElementById(`ipfs-content-${proposalId}`);
+                if (container && content) {
+                    container.innerHTML = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
+                    container.style.display = 'block';
+                }
+            } catch (e) {
+                console.log('Could not load IPFS content:', e);
+            }
+        }
+
+        function updateCountdown(proposalId, deadline) {
+            const el = document.getElementById('countdown-' + proposalId);
+            if (!el) return;
+
+            const update = () => {
+                const remaining = deadline - Math.floor(Date.now() / 1000);
+                if (remaining <= 0) {
+                    el.textContent = 'Voting ended';
+                    el.style.color = 'var(--text-muted)';
+                    return false;
+                }
+                const minutes = Math.floor(remaining / 60);
+                const seconds = Math.floor(remaining % 60);
+                el.textContent = `${minutes}m ${seconds}s remaining`;
+                return true;
+            };
+
+            update();
+            const interval = setInterval(() => {
+                if (!update()) {
+                    clearInterval(interval);
+                    setTimeout(loadProposals, 1000);
+                }
+            }, 1000);
+        }
+
+        async function vote(proposalId, support) {
+            if (!contract || !signer) {
+                showToast('Please connect your wallet first', 'error');
+                return;
+            }
+
+            const card = document.querySelector(`[data-id="${proposalId}"]`);
+            const buttons = card.querySelectorAll('button');
+            buttons.forEach(b => b.disabled = true);
+
+            try {
+                showToast('Submitting vote on-chain...', 'info');
+                const tx = await contract.vote(proposalId, support);
+                showToast('Transaction submitted, waiting for confirmation...', 'info');
+                await tx.wait();
+                showToast('Vote recorded successfully!', 'success');
+                setTimeout(loadProposals, 2000);
+            } catch (error) {
+                console.error('Vote error:', error);
+                if (error.code === 4001) {
+                    showToast('Transaction rejected', 'error');
+                } else if (error.message.includes('NotHatWearer')) {
+                    showToast('You must wear the required hat to vote', 'error');
+                } else if (error.message.includes('AlreadyVoted')) {
+                    showToast('You have already voted on this proposal', 'error');
+                } else {
+                    showToast('Vote failed: ' + (error.reason || error.message), 'error');
+                }
+                buttons.forEach(b => b.disabled = false);
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text || '';
+            return div.innerHTML;
+        }
+
+        function formatDate(timestamp) {
+            return new Date(timestamp * 1000).toLocaleString();
+        }
+
+        // Event listeners
+        if (window.ethereum) {
+            window.ethereum.on('accountsChanged', (accounts) => {
+                if (accounts.length === 0) location.reload();
+                else { connectedAddress = accounts[0]; updateWalletUI(); loadProposals(); }
+            });
+            window.ethereum.on('chainChanged', () => location.reload());
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadProposals();
+            setInterval(loadProposals, 30000);
+        });
+    </script>
+</body>
+</html>
