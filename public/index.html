@@ -566,8 +566,8 @@
                     </div>
                     <div id="taskDetailsContent" class="task-details-content"></div>
                 </div>
-                <div class="ipfs-input-section">
-                    <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">Load proposal context from IPFS:</div>
+                <div id="ipfsInputSection" class="ipfs-input-section" style="display: none;">
+                    <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">Manual IPFS load (fallback):</div>
                     <div class="ipfs-input-row">
                         <input type="text" id="ipfsCidInput" class="ipfs-input" placeholder="Enter IPFS CID (e.g., QmXxx...)">
                         <button class="ipfs-fetch-btn" onclick="fetchIPFSManual()">Load</button>
@@ -596,18 +596,18 @@
 
     <script>
         // Contract configuration
-        const CONTRACT_ADDRESS = '0x5c63baF1501B9c50dA4a9e1A38BeC430a2b3d4Df';
+        const CONTRACT_ADDRESS = '0x9Bcf229d6Ca62Dc08f3720266Ad16e6C658eC69D';
         const CHAIN_ID = 8453;
         const RPC_URL = 'https://base.publicnode.com';
         const IPFS_GATEWAY = 'https://gateway.pinata.cloud/ipfs';
 
-        // Contract ABI
+        // Contract ABI - includes ipfsCid field
         const CONTRACT_ABI = [
             'function proposalCount() view returns (uint256)',
-            'function getProposal(uint256) view returns (bytes32 questionHash, uint256 requiredHatId, uint256 yesVotes, uint256 noVotes, uint256 deadline, bool executed, address creator)',
+            'function getProposal(uint256) view returns (bytes32 questionHash, uint256 requiredHatId, uint256 yesVotes, uint256 noVotes, uint256 deadline, bool executed, address creator, string ipfsCid)',
             'function vote(uint256 proposalId, bool support)',
             'function hasVoted(uint256 proposalId, address voter) view returns (bool)',
-            'event ProposalCreated(uint256 indexed proposalId, bytes32 questionHash, uint256 hatId, uint256 deadline, address creator)'
+            'event ProposalCreated(uint256 indexed proposalId, bytes32 questionHash, uint256 hatId, uint256 deadline, address creator, string ipfsCid)'
         ];
 
         const HATS_ABI = [
@@ -761,6 +761,7 @@
 
                         const hatId = p[1].toString();
                         const wearerCount = await getHatWearerCount(hatId);
+                        const ipfsCid = p[7] || '';  // Get IPFS CID from contract
 
                         proposals.push({
                             id: i,
@@ -771,6 +772,7 @@
                             deadline,
                             executed,
                             creator: p[6],
+                            ipfsCid,
                             isActive,
                             status,
                             wearerCount
@@ -784,6 +786,20 @@
 
                 // Update live section
                 const activeProposal = proposals.find(p => p.isActive);
+
+                // Auto-fetch IPFS content for active proposal
+                if (activeProposal && activeProposal.ipfsCid && !currentIPFSContent) {
+                    console.log('Auto-fetching IPFS content:', activeProposal.ipfsCid);
+                    fetchIPFSContent(activeProposal.ipfsCid).then(content => {
+                        if (content) {
+                            currentIPFSContent = content;
+                            updateLiveSectionWithIPFS(content);
+                            // Re-render proposals with updated content
+                            container.innerHTML = proposals.map(p => renderProposal(p)).join('');
+                        }
+                    });
+                }
+
                 updateLiveSection(activeProposal);
 
                 // Update voter info
@@ -812,6 +828,7 @@
             const taskSummary = document.getElementById('liveTaskSummary');
             const statsEl = document.getElementById('liveStats');
             const taskDetails = document.getElementById('taskDetails');
+            const ipfsInputSection = document.getElementById('ipfsInputSection');
 
             if (activeProposal) {
                 indicator.className = 'live-indicator';
@@ -821,10 +838,13 @@
                 // If we have IPFS content, show it
                 if (currentIPFSContent) {
                     updateLiveSectionWithIPFS(currentIPFSContent);
+                    ipfsInputSection.style.display = 'none';
                 } else {
                     taskHeader.textContent = `Proposal #${activeProposal.id}: Iteration Approval`;
                     taskSummary.style.display = 'none';
                     taskDetails.style.display = 'none';
+                    // Show manual IPFS input only if no CID on contract and no content loaded
+                    ipfsInputSection.style.display = activeProposal.ipfsCid ? 'none' : 'block';
                 }
 
                 document.getElementById('statIteration').textContent = activeProposal.id;
@@ -840,6 +860,7 @@
                 taskSummary.style.display = 'none';
                 statsEl.style.display = 'none';
                 taskDetails.style.display = 'none';
+                ipfsInputSection.style.display = 'none';
             }
         }
 
@@ -914,6 +935,7 @@
                         <div class="proposal-id-badge">
                             <span class="proposal-id">#${p.id}</span>
                             <span class="proposal-status status-${p.status}">${p.status}</span>
+                            ${p.ipfsCid ? `<a href="${IPFS_GATEWAY}/${p.ipfsCid}" target="_blank" class="ipfs-link" title="View on IPFS">IPFS</a>` : ''}
                         </div>
                         ${p.wearerCount ? `<div class="hat-info">&#127913; ${p.wearerCount} voter${p.wearerCount !== 1 ? 's' : ''}</div>` : ''}
                     </div>

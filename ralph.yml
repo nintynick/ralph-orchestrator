@@ -107,7 +107,7 @@ hats_approval:
   # Contract addresses
   contracts:
     hats_protocol: "0x3bc1A0Ad72417f2d411118085256fC53CBdDd137"  # Hats Protocol on Base
-    ralph_proposal: "0x5c63baF1501B9c50dA4a9e1A38BeC430a2b3d4Df"  # Deployed RalphProposal contract
+    ralph_proposal: "0x9Bcf229d6Ca62Dc08f3720266Ad16e6C658eC69D"  # RalphProposal contract with IPFS CID support
 
   # Voting configuration
   voting_period: 300                   # Voting period in seconds (5 minutes)

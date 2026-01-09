@@ -23,6 +23,7 @@ contract RalphProposal {
         uint256 deadline;          // Voting deadline (block timestamp)
         bool executed;             // Whether result has been finalized
         address creator;           // Address that created the proposal
+        string ipfsCid;            // IPFS CID for proposal content
     }
 
     /// @notice Total number of proposals created
@@ -40,7 +41,8 @@ contract RalphProposal {
         bytes32 questionHash,
         uint256 hatId,
         uint256 deadline,
-        address creator
+        address creator,
+        string ipfsCid
     );
 
     /// @notice Emitted when a vote is cast
@@ -84,11 +86,13 @@ contract RalphProposal {
     /// @param questionHash Keccak256 hash of the question text
     /// @param requiredHatId Hat ID required to vote on this proposal
     /// @param votingPeriod Duration of voting period in seconds
+    /// @param ipfsCid IPFS CID containing full proposal content
     /// @return proposalId The ID of the created proposal
     function createProposal(
         bytes32 questionHash,
         uint256 requiredHatId,
-        uint256 votingPeriod
+        uint256 votingPeriod,
+        string calldata ipfsCid
     ) external returns (uint256 proposalId) {
         require(votingPeriod > 0, "Invalid voting period");
         require(votingPeriod <= 7 days, "Voting period too long");
@@ -102,7 +106,8 @@ contract RalphProposal {
             noVotes: 0,
             deadline: block.timestamp + votingPeriod,
             executed: false,
-            creator: msg.sender
+            creator: msg.sender,
+            ipfsCid: ipfsCid
         });
 
         emit ProposalCreated(
@@ -110,7 +115,8 @@ contract RalphProposal {
             questionHash,
             requiredHatId,
             block.timestamp + votingPeriod,
-            msg.sender
+            msg.sender,
+            ipfsCid
         );
     }
 
@@ -218,6 +224,7 @@ contract RalphProposal {
     /// @return deadline Voting deadline timestamp
     /// @return executed Whether proposal has been executed
     /// @return creator Address that created the proposal
+    /// @return ipfsCid IPFS CID for proposal content
     function getProposal(uint256 proposalId)
         external
         view
@@ -228,7 +235,8 @@ contract RalphProposal {
             uint256 noVotes,
             uint256 deadline,
             bool executed,
-            address creator
+            address creator,
+            string memory ipfsCid
         )
     {
         Proposal storage p = proposals[proposalId];
@@ -239,7 +247,8 @@ contract RalphProposal {
             p.noVotes,
             p.deadline,
             p.executed,
-            p.creator
+            p.creator,
+            p.ipfsCid
         );
     }
 

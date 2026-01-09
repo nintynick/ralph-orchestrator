@@ -38,6 +38,7 @@ RALPH_PROPOSAL_ABI = [
             {"name": "questionHash", "type": "bytes32"},
             {"name": "requiredHatId", "type": "uint256"},
             {"name": "votingPeriod", "type": "uint256"},
+            {"name": "ipfsCid", "type": "string"},
         ],
         "name": "createProposal",
         "outputs": [{"name": "proposalId", "type": "uint256"}],
@@ -77,6 +78,7 @@ RALPH_PROPOSAL_ABI = [
             {"name": "deadline", "type": "uint256"},
             {"name": "executed", "type": "bool"},
             {"name": "creator", "type": "address"},
+            {"name": "ipfsCid", "type": "string"},
         ],
         "stateMutability": "view",
         "type": "function",
@@ -96,6 +98,7 @@ RALPH_PROPOSAL_ABI = [
             {"indexed": False, "name": "hatId", "type": "uint256"},
             {"indexed": False, "name": "deadline", "type": "uint256"},
             {"indexed": False, "name": "creator", "type": "address"},
+            {"indexed": False, "name": "ipfsCid", "type": "string"},
         ],
         "name": "ProposalCreated",
         "type": "event",
@@ -257,7 +260,7 @@ class HatsContractClient:
             return False
 
     async def create_proposal(
-        self, question: str, hat_id: int, voting_period: int
+        self, question: str, hat_id: int, voting_period: int, ipfs_cid: Optional[str] = None
     ) -> Tuple[int, str]:
         """Create an on-chain proposal.
 
@@ -265,6 +268,7 @@ class HatsContractClient:
             question: The question to vote on
             hat_id: Required hat ID for voters
             voting_period: Voting period in seconds
+            ipfs_cid: Optional IPFS CID for proposal content
 
         Returns:
             Tuple of (proposal_id, tx_hash)
@@ -295,7 +299,7 @@ class HatsContractClient:
         try:
             # Build transaction
             tx = self._proposal_contract.functions.createProposal(
-                question_hash, hat_id, voting_period
+                question_hash, hat_id, voting_period, ipfs_cid or ""
             ).build_transaction(
                 {
                     "from": self._account.address,
@@ -421,6 +425,7 @@ class HatsContractClient:
                 "deadline": result[4],
                 "executed": result[5],
                 "creator": result[6],
+                "ipfs_cid": result[7] if len(result) > 7 else "",
             }
         except Exception as e:
             logger.error(f"Error getting proposal details: {e}")

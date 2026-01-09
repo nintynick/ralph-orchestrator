@@ -166,6 +166,7 @@ class HatsApprovalManager:
                 question=request.question,
                 hat_id=hat_id,
                 voting_period=self.config.voting_period,
+                ipfs_cid=ipfs_cid,
             )
 
             proposal = Proposal(
