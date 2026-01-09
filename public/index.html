@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ralph - Hats Voting Portal</title>
+    <title>Ralph - Live Voting Portal</title>
     <script src="https://cdn.jsdelivr.net/npm/ethers@6.9.0/dist/ethers.umd.min.js"></script>
     <style>
         :root {
-            --bg-primary: #0f0f0f;
-            --bg-secondary: #1a1a1a;
-            --bg-tertiary: #252525;
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #141414;
+            --bg-tertiary: #1e1e1e;
+            --bg-card: #181818;
             --text-primary: #ffffff;
             --text-secondary: #a0a0a0;
             --text-muted: #666666;
@@ -17,20 +18,21 @@
             --accent-red: #f87171;
             --accent-yellow: #fbbf24;
             --accent-blue: #60a5fa;
-            --border-color: #333333;
+            --accent-purple: #a78bfa;
+            --border-color: #2a2a2a;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            font-family: 'SF Mono', 'Fira Code', monospace;
             background: var(--bg-primary);
             color: var(--text-primary);
             min-height: 100vh;
-            line-height: 1.5;
+            line-height: 1.6;
         }
 
-        .container { max-width: 900px; margin: 0 auto; padding: 20px; }
+        .container { max-width: 1000px; margin: 0 auto; padding: 20px; }
 
         .header {
             display: flex;
@@ -38,157 +40,456 @@
             align-items: center;
             padding: 20px 0;
             border-bottom: 1px solid var(--border-color);
-            margin-bottom: 30px;
+            margin-bottom: 24px;
         }
 
-        .header h1 { font-size: 24px; font-weight: 600; }
+        .header h1 {
+            font-size: 20px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header h1 .logo {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue));
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
 
         .wallet-btn {
             display: flex;
             align-items: center;
             gap: 8px;
-            padding: 10px 20px;
+            padding: 10px 16px;
             border-radius: 8px;
-            border: none;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .wallet-btn.connect { background: var(--accent-blue); color: white; }
-        .wallet-btn.connect:hover { background: #3b82f6; }
-        .wallet-btn.connected {
+            border: 1px solid var(--border-color);
             background: var(--bg-tertiary);
             color: var(--text-primary);
-            border: 1px solid var(--border-color);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
         }
+
+        .wallet-btn:hover { background: var(--bg-secondary); border-color: var(--accent-blue); }
         .wallet-btn .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-green); }
 
-        .status-bar {
-            background: var(--bg-secondary);
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 30px;
-            border: 1px solid var(--border-color);
+        /* Live Status Section */
+        .live-section {
+            background: linear-gradient(135deg, rgba(167, 139, 250, 0.1), rgba(96, 165, 250, 0.1));
+            border: 1px solid rgba(167, 139, 250, 0.3);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
+            position: relative;
+            overflow: hidden;
         }
 
-        .status-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; }
-        .status-item { display: flex; align-items: center; gap: 10px; }
-        .status-label { color: var(--text-secondary); font-size: 14px; }
-        .status-value { font-weight: 600; }
+        .live-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, var(--accent-purple), var(--accent-blue), var(--accent-purple));
+            background-size: 200% 100%;
+            animation: shimmer 2s linear infinite;
+        }
 
-        .hat-badge {
-            display: inline-flex;
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        .live-header {
+            display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .live-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
             padding: 4px 12px;
+            background: rgba(74, 222, 128, 0.2);
             border-radius: 20px;
             font-size: 12px;
             font-weight: 600;
+            color: var(--accent-green);
         }
 
-        .hat-badge.wearer { background: rgba(74, 222, 128, 0.2); color: var(--accent-green); }
-        .hat-badge.not-wearer { background: rgba(248, 113, 113, 0.2); color: var(--accent-red); }
+        .live-indicator .pulse {
+            width: 8px;
+            height: 8px;
+            background: var(--accent-green);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
 
-        .proposal-card {
-            background: var(--bg-secondary);
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
+        }
+
+        .live-indicator.idle {
+            background: rgba(102, 102, 102, 0.2);
+            color: var(--text-muted);
+        }
+
+        .live-indicator.idle .pulse {
+            background: var(--text-muted);
+            animation: none;
+        }
+
+        .live-title { font-size: 14px; color: var(--text-secondary); }
+
+        .live-content {
+            background: var(--bg-primary);
             border-radius: 12px;
-            padding: 24px;
+            padding: 20px;
+            border: 1px solid var(--border-color);
+        }
+
+        .live-task {
+            font-size: 16px;
+            font-weight: 500;
+            margin-bottom: 16px;
+            color: var(--text-primary);
+        }
+
+        .live-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .live-stat {
+            background: var(--bg-tertiary);
+            padding: 12px 16px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        .live-stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .live-stat-value { font-size: 18px; font-weight: 600; color: var(--text-primary); margin-top: 4px; }
+        .live-stat-value.cost { color: var(--accent-yellow); }
+        .live-stat-value.success { color: var(--accent-green); }
+
+        .live-context {
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            padding: 16px;
+            font-size: 13px;
+            border: 1px solid var(--border-color);
+        }
+
+        .live-context-title {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .live-context pre {
+            white-space: pre-wrap;
+            word-break: break-word;
+            color: var(--text-secondary);
+            font-family: inherit;
+            margin: 0;
+        }
+
+        /* Section Headers */
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .section-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .voter-count {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: var(--text-muted);
+            background: var(--bg-tertiary);
+            padding: 4px 10px;
+            border-radius: 12px;
+        }
+
+        /* Proposal Cards */
+        .proposal-card {
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 12px;
+            border: 1px solid var(--border-color);
+            transition: border-color 0.2s;
+        }
+
+        .proposal-card:hover { border-color: #3a3a3a; }
+        .proposal-card.active { border-color: var(--accent-yellow); }
+
+        .proposal-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+
+        .proposal-id-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .proposal-id {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .proposal-status {
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-active { background: rgba(251, 191, 36, 0.2); color: var(--accent-yellow); }
+        .status-approved { background: rgba(74, 222, 128, 0.2); color: var(--accent-green); }
+        .status-rejected { background: rgba(248, 113, 113, 0.2); color: var(--accent-red); }
+        .status-expired { background: rgba(102, 102, 102, 0.2); color: var(--text-muted); }
+
+        .proposal-question {
+            font-size: 15px;
+            font-weight: 500;
+            margin-bottom: 12px;
+            color: var(--text-primary);
+        }
+
+        .proposal-context {
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            padding: 12px 16px;
             margin-bottom: 16px;
             border: 1px solid var(--border-color);
         }
 
-        .proposal-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
-        .proposal-id { color: var(--text-muted); font-size: 13px; font-weight: 500; }
-
-        .proposal-status {
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
-            text-transform: uppercase;
+        .context-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 12px;
         }
 
-        .status-active { background: var(--accent-yellow); color: #000; }
-        .status-approved { background: var(--accent-green); color: #000; }
-        .status-rejected { background: var(--accent-red); color: #000; }
-        .status-expired { background: var(--text-muted); color: #000; }
+        .context-item {
+            display: flex;
+            flex-direction: column;
+        }
 
-        .proposal-question { font-size: 18px; font-weight: 500; margin-bottom: 12px; }
-        .proposal-meta { display: flex; gap: 24px; margin-bottom: 16px; font-size: 14px; color: var(--text-secondary); flex-wrap: wrap; }
+        .context-label {
+            font-size: 10px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
 
-        .vote-counts { display: flex; gap: 24px; margin-bottom: 20px; }
-        .vote-count { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; }
-        .vote-count.yes { color: var(--accent-green); }
-        .vote-count.no { color: var(--accent-red); }
+        .context-value {
+            font-size: 13px;
+            color: var(--text-primary);
+            font-weight: 500;
+        }
 
-        .vote-progress { height: 6px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden; margin-bottom: 20px; }
-        .vote-progress-bar { height: 100%; background: var(--accent-green); transition: width 0.3s; }
+        .proposal-meta {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 16px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            flex-wrap: wrap;
+        }
 
-        .vote-actions { display: flex; gap: 12px; }
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .countdown { color: var(--accent-yellow); font-weight: 600; }
+
+        .vote-section {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .vote-stats {
+            display: flex;
+            gap: 16px;
+            flex: 1;
+        }
+
+        .vote-stat {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .vote-stat.yes { color: var(--accent-green); }
+        .vote-stat.no { color: var(--accent-red); }
+
+        .vote-bar {
+            flex: 1;
+            height: 4px;
+            background: var(--bg-tertiary);
+            border-radius: 2px;
+            overflow: hidden;
+            min-width: 100px;
+        }
+
+        .vote-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent-green), var(--accent-blue));
+            transition: width 0.3s;
+        }
+
+        .vote-actions {
+            display: flex;
+            gap: 8px;
+        }
 
         .vote-btn {
-            flex: 1;
-            padding: 14px 24px;
+            padding: 10px 20px;
             border-radius: 8px;
             border: none;
-            font-size: 16px;
+            font-size: 13px;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.2s;
+            font-family: inherit;
         }
 
-        .vote-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .vote-btn:disabled { opacity: 0.4; cursor: not-allowed; }
         .vote-btn.yes { background: var(--accent-green); color: #000; }
         .vote-btn.yes:hover:not(:disabled) { background: #22c55e; }
         .vote-btn.no { background: var(--accent-red); color: #000; }
         .vote-btn.no:hover:not(:disabled) { background: #ef4444; }
 
-        .empty-state { text-align: center; padding: 60px 20px; color: var(--text-muted); }
-        .empty-state-icon { font-size: 48px; margin-bottom: 16px; }
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-muted);
+        }
 
         .loading { display: flex; justify-content: center; align-items: center; padding: 40px; }
-        .spinner { width: 32px; height: 32px; border: 3px solid var(--border-color); border-top-color: var(--accent-blue); border-radius: 50%; animation: spin 1s linear infinite; }
+        .spinner { width: 24px; height: 24px; border: 2px solid var(--border-color); border-top-color: var(--accent-blue); border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        .countdown { font-family: monospace; font-size: 14px; color: var(--accent-yellow); }
-
         .toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 1000; }
-        .toast { padding: 16px 20px; border-radius: 8px; margin-top: 10px; font-size: 14px; font-weight: 500; display: none; animation: slideIn 0.3s ease; }
+        .toast { padding: 12px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; display: none; animation: slideIn 0.3s ease; }
         .toast.show { display: block; }
         .toast.success { background: #166534; color: white; }
         .toast.error { background: #991b1b; color: white; }
         .toast.info { background: #1e40af; color: white; }
         @keyframes slideIn { from { transform: translateX(100px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 
-        .ipfs-content { background: var(--bg-tertiary); border-radius: 8px; padding: 16px; margin: 16px 0; font-size: 14px; }
-        .ipfs-content pre { white-space: pre-wrap; word-break: break-word; }
+        .hat-info {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: var(--accent-purple);
+            background: rgba(167, 139, 250, 0.1);
+            padding: 4px 10px;
+            border-radius: 12px;
+        }
 
         @media (max-width: 600px) {
             .header { flex-direction: column; gap: 15px; }
-            .status-row { flex-direction: column; }
-            .vote-actions { flex-direction: column; }
+            .live-stats { grid-template-columns: 1fr 1fr; }
+            .vote-section { flex-direction: column; align-items: stretch; }
+            .vote-actions { width: 100%; }
+            .vote-btn { flex: 1; }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <header class="header">
-            <h1>Ralph Voting Portal</h1>
-            <button id="walletBtn" class="wallet-btn connect" onclick="connectWallet()">Connect Wallet</button>
+            <h1>
+                <span class="logo">R</span>
+                Ralph Voting Portal
+            </h1>
+            <button id="walletBtn" class="wallet-btn" onclick="connectWallet()">Connect Wallet</button>
         </header>
 
-        <div id="statusBar" class="status-bar" style="display: none;">
-            <div class="status-row">
-                <div class="status-item">
-                    <span class="status-label">Connected as</span>
-                    <span id="walletAddress" class="status-value">-</span>
+        <!-- Live Status Section -->
+        <div id="liveSection" class="live-section">
+            <div class="live-header">
+                <div id="liveIndicator" class="live-indicator idle">
+                    <span class="pulse"></span>
+                    <span id="liveStatus">IDLE</span>
                 </div>
-                <div class="status-item">
-                    <span class="status-label">Network</span>
-                    <span class="status-value">Base</span>
+                <span class="live-title">Ralph Agent Status</span>
+            </div>
+            <div class="live-content">
+                <div id="liveTask" class="live-task">Waiting for proposals...</div>
+                <div id="liveStats" class="live-stats" style="display: none;">
+                    <div class="live-stat">
+                        <div class="live-stat-label">Iteration</div>
+                        <div id="statIteration" class="live-stat-value">-</div>
+                    </div>
+                    <div class="live-stat">
+                        <div class="live-stat-label">Success Rate</div>
+                        <div id="statSuccess" class="live-stat-value success">-</div>
+                    </div>
+                    <div class="live-stat">
+                        <div class="live-stat-label">Current Cost</div>
+                        <div id="statCost" class="live-stat-value cost">-</div>
+                    </div>
+                    <div class="live-stat">
+                        <div class="live-stat-label">Decision Type</div>
+                        <div id="statDecision" class="live-stat-value">-</div>
+                    </div>
                 </div>
+                <div id="liveContext" class="live-context" style="display: none;">
+                    <div class="live-context-title">Current Task</div>
+                    <pre id="contextContent">-</pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- Proposals Section -->
+        <div class="section-header">
+            <span class="section-title">Proposals</span>
+            <div id="voterInfo" class="voter-count" style="display: none;">
+                <span>Eligible Voters:</span>
+                <strong id="voterCount">-</strong>
             </div>
         </div>
 
@@ -207,8 +508,9 @@
         const CHAIN_ID = 8453;
         const RPC_URL = 'https://base.publicnode.com';
         const IPFS_GATEWAY = 'https://gateway.pinata.cloud/ipfs';
+        const HATS_SUBGRAPH = 'https://api.thegraph.com/subgraphs/name/hats-protocol/hats-v1-base';
 
-        // Contract ABI (minimal)
+        // Contract ABI
         const CONTRACT_ABI = [
             'function proposalCount() view returns (uint256)',
             'function getProposal(uint256) view returns (bytes32 questionHash, uint256 requiredHatId, uint256 yesVotes, uint256 noVotes, uint256 deadline, bool executed, address creator)',
@@ -218,7 +520,8 @@
         ];
 
         const HATS_ABI = [
-            'function isWearerOfHat(address account, uint256 hatId) view returns (bool)'
+            'function isWearerOfHat(address account, uint256 hatId) view returns (bool)',
+            'function hatSupply(uint256 hatId) view returns (uint32)'
         ];
         const HATS_ADDRESS = '0x3bc1A0Ad72417f2d411118085256fC53CBdDd137';
 
@@ -227,6 +530,8 @@
         let connectedAddress = null;
         let contract = null;
         let hatsContract = null;
+        let ipfsCache = {};
+        let hatWearerCounts = {};
 
         function showToast(message, type = 'info') {
             const toast = document.getElementById('toast');
@@ -269,15 +574,46 @@
 
         function updateWalletUI() {
             const btn = document.getElementById('walletBtn');
-            const statusBar = document.getElementById('statusBar');
-            const addressEl = document.getElementById('walletAddress');
-
             if (connectedAddress) {
                 const shortAddr = connectedAddress.slice(0, 6) + '...' + connectedAddress.slice(-4);
                 btn.innerHTML = '<span class="dot"></span>' + shortAddr;
-                btn.className = 'wallet-btn connected';
-                statusBar.style.display = 'block';
-                addressEl.textContent = shortAddr;
+            }
+        }
+
+        async function fetchIPFSContent(questionHash) {
+            // Try to find IPFS CID from recent ProposalCreated events or use a mapping
+            // For now, we'll try common patterns based on the question hash
+            // In production, you'd index events or store CID mappings
+
+            // Check cache
+            if (ipfsCache[questionHash]) {
+                return ipfsCache[questionHash];
+            }
+
+            try {
+                // Try to fetch from a known API or indexed source
+                // For demo, return null - real impl would query event logs
+                return null;
+            } catch (e) {
+                console.log('Could not fetch IPFS content');
+                return null;
+            }
+        }
+
+        async function getHatWearerCount(hatId) {
+            if (hatWearerCounts[hatId]) {
+                return hatWearerCounts[hatId];
+            }
+
+            try {
+                const readProvider = new ethers.JsonRpcProvider(RPC_URL);
+                const hats = new ethers.Contract(HATS_ADDRESS, HATS_ABI, readProvider);
+                const supply = await hats.hatSupply(hatId);
+                hatWearerCounts[hatId] = Number(supply);
+                return hatWearerCounts[hatId];
+            } catch (e) {
+                console.log('Could not get hat supply:', e);
+                return null;
             }
         }
 
@@ -285,7 +621,6 @@
             const container = document.getElementById('proposalsList');
 
             try {
-                // Use read-only provider
                 const readProvider = new ethers.JsonRpcProvider(RPC_URL);
                 const readContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, readProvider);
 
@@ -293,7 +628,8 @@
                 const currentTime = Math.floor(Date.now() / 1000);
 
                 if (count === 0n) {
-                    container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">&#10003;</div><p>No proposals yet</p></div>';
+                    container.innerHTML = '<div class="empty-state"><p>No proposals yet. Ralph will create proposals when running.</p></div>';
+                    updateLiveSection(null);
                     return;
                 }
 
@@ -303,7 +639,6 @@
                 for (let i = start; i <= Number(count); i++) {
                     try {
                         const p = await readContract.getProposal(i);
-                        // Returns: questionHash, requiredHatId, yesVotes, noVotes, deadline, executed, creator
                         const deadline = Number(p[4]);
                         const executed = p[5];
                         const yesVotes = Number(p[2]);
@@ -312,19 +647,25 @@
 
                         let status = 'expired';
                         if (isActive) status = 'active';
-                        else if (executed) status = yesVotes > noVotes ? 'approved' : 'rejected';
+                        else if (executed || deadline <= currentTime) {
+                            status = yesVotes > noVotes ? 'approved' : (yesVotes === noVotes && yesVotes === 0 ? 'expired' : 'rejected');
+                        }
+
+                        const hatId = p[1].toString();
+                        const wearerCount = await getHatWearerCount(hatId);
 
                         proposals.push({
                             id: i,
                             questionHash: p[0],
-                            hatId: p[1].toString(),
+                            hatId,
                             yesVotes,
                             noVotes,
                             deadline,
                             executed,
                             creator: p[6],
                             isActive,
-                            status
+                            status,
+                            wearerCount
                         });
                     } catch (e) {
                         console.error('Error loading proposal', i, e);
@@ -332,16 +673,82 @@
                 }
 
                 proposals.sort((a, b) => b.id - a.id);
+
+                // Update live section with most recent active proposal
+                const activeProposal = proposals.find(p => p.isActive);
+                updateLiveSection(activeProposal);
+
+                // Update voter info
+                if (proposals.length > 0 && proposals[0].wearerCount) {
+                    document.getElementById('voterInfo').style.display = 'flex';
+                    document.getElementById('voterCount').textContent = proposals[0].wearerCount;
+                }
+
                 container.innerHTML = proposals.map(p => renderProposal(p)).join('');
 
-                // Start countdown timers
+                // Start countdown timers and load IPFS content
                 proposals.forEach(p => {
                     if (p.isActive) updateCountdown(p.id, p.deadline);
+                    loadProposalIPFS(p.id, p.questionHash);
                 });
 
             } catch (error) {
                 console.error('Failed to load proposals:', error);
-                container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">&#9888;</div><p>Failed to load proposals</p></div>';
+                container.innerHTML = '<div class="empty-state"><p>Failed to load proposals. Check console for details.</p></div>';
+            }
+        }
+
+        async function loadProposalIPFS(proposalId, questionHash) {
+            // Try to fetch IPFS content by querying events
+            try {
+                const readProvider = new ethers.JsonRpcProvider(RPC_URL);
+                const readContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, readProvider);
+
+                // Get ProposalCreated events for this proposal
+                const filter = readContract.filters.ProposalCreated(proposalId);
+                const events = await readContract.queryFilter(filter, -10000);
+
+                if (events.length > 0) {
+                    // The IPFS CID might be in the transaction data or indexed elsewhere
+                    // For now, try to derive from the event
+                    console.log('Found event for proposal', proposalId, events[0]);
+                }
+            } catch (e) {
+                console.log('Could not load IPFS for proposal', proposalId);
+            }
+        }
+
+        function updateLiveSection(activeProposal) {
+            const indicator = document.getElementById('liveIndicator');
+            const statusEl = document.getElementById('liveStatus');
+            const taskEl = document.getElementById('liveTask');
+            const statsEl = document.getElementById('liveStats');
+            const contextEl = document.getElementById('liveContext');
+
+            if (activeProposal) {
+                indicator.className = 'live-indicator';
+                statusEl.textContent = 'AWAITING VOTE';
+                taskEl.textContent = `Proposal #${activeProposal.id}: Should Ralph proceed with the next iteration?`;
+                statsEl.style.display = 'grid';
+
+                // Set stats (these would come from IPFS content in production)
+                document.getElementById('statIteration').textContent = activeProposal.id;
+                document.getElementById('statSuccess').textContent = `${Math.round((activeProposal.yesVotes / Math.max(1, activeProposal.yesVotes + activeProposal.noVotes)) * 100)}%`;
+                document.getElementById('statCost').textContent = '$0.00';
+                document.getElementById('statDecision').textContent = 'Iteration';
+
+                contextEl.style.display = 'block';
+                document.getElementById('contextContent').textContent =
+                    `Decision Type: iteration_approval\n` +
+                    `Hat ID: ${activeProposal.hatId.slice(0, 20)}...\n` +
+                    `Creator: ${activeProposal.creator}\n` +
+                    `Deadline: ${new Date(activeProposal.deadline * 1000).toLocaleString()}`;
+            } else {
+                indicator.className = 'live-indicator idle';
+                statusEl.textContent = 'IDLE';
+                taskEl.textContent = 'No active proposals. Ralph is either paused or waiting for the next task.';
+                statsEl.style.display = 'none';
+                contextEl.style.display = 'none';
             }
         }
 
@@ -350,49 +757,60 @@
             const yesPercent = totalVotes > 0 ? (p.yesVotes / totalVotes) * 100 : 50;
             const canVoteOnThis = p.isActive && connectedAddress;
 
-            // Show a readable question (questionHash is bytes32, so we display a friendly name)
-            const question = `Should Ralph proceed with iteration? (Proposal #${p.id})`;
-
             return `
-                <div class="proposal-card" data-id="${p.id}">
-                    <div class="proposal-header">
-                        <span class="proposal-id">Proposal #${p.id}</span>
-                        <span class="proposal-status status-${p.status}">${p.status}</span>
+                <div class="proposal-card ${p.isActive ? 'active' : ''}" data-id="${p.id}">
+                    <div class="proposal-top">
+                        <div class="proposal-id-badge">
+                            <span class="proposal-id">#${p.id}</span>
+                            <span class="proposal-status status-${p.status}">${p.status}</span>
+                        </div>
+                        ${p.wearerCount ? `<div class="hat-info">&#127913; ${p.wearerCount} eligible voter${p.wearerCount !== 1 ? 's' : ''}</div>` : ''}
                     </div>
-                    <div class="proposal-question">${escapeHtml(question)}</div>
+
+                    <div class="proposal-question">Should Ralph proceed with iteration ${p.id}?</div>
+
+                    <div class="proposal-context">
+                        <div class="context-grid">
+                            <div class="context-item">
+                                <span class="context-label">Decision Type</span>
+                                <span class="context-value">Iteration Approval</span>
+                            </div>
+                            <div class="context-item">
+                                <span class="context-label">Creator</span>
+                                <span class="context-value">${p.creator ? p.creator.slice(0, 8) + '...' : 'Unknown'}</span>
+                            </div>
+                            <div class="context-item">
+                                <span class="context-label">Required Hat</span>
+                                <span class="context-value">${p.hatId.slice(0, 12)}...</span>
+                            </div>
+                            <div class="context-item">
+                                <span class="context-label">Participation</span>
+                                <span class="context-value">${totalVotes}/${p.wearerCount || '?'} votes</span>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="proposal-meta">
-                        <span id="countdown-${p.id}" class="countdown">${p.isActive ? 'Loading...' : formatDate(p.deadline)}</span>
-                        <span>Creator: ${p.creator ? p.creator.slice(0, 6) + '...' + p.creator.slice(-4) : 'Unknown'}</span>
+                        <div class="meta-item">
+                            <span id="countdown-${p.id}" class="countdown">${p.isActive ? 'Loading...' : formatDate(p.deadline)}</span>
+                        </div>
                     </div>
-                    <div class="vote-counts">
-                        <div class="vote-count yes">&#128077; ${p.yesVotes} Yes</div>
-                        <div class="vote-count no">&#128078; ${p.noVotes} No</div>
-                    </div>
-                    <div class="vote-progress">
-                        <div class="vote-progress-bar" style="width: ${yesPercent}%"></div>
-                    </div>
-                    <div class="vote-actions">
-                        <button class="vote-btn yes" onclick="vote(${p.id}, true)" ${!canVoteOnThis ? 'disabled' : ''}>Vote Yes</button>
-                        <button class="vote-btn no" onclick="vote(${p.id}, false)" ${!canVoteOnThis ? 'disabled' : ''}>Vote No</button>
+
+                    <div class="vote-section">
+                        <div class="vote-stats">
+                            <div class="vote-stat yes">&#9650; ${p.yesVotes}</div>
+                            <div class="vote-bar">
+                                <div class="vote-bar-fill" style="width: ${yesPercent}%"></div>
+                            </div>
+                            <div class="vote-stat no">&#9660; ${p.noVotes}</div>
+                        </div>
+                        <div class="vote-actions">
+                            <button class="vote-btn yes" onclick="vote(${p.id}, true)" ${!canVoteOnThis ? 'disabled' : ''}>Approve</button>
+                            <button class="vote-btn no" onclick="vote(${p.id}, false)" ${!canVoteOnThis ? 'disabled' : ''}>Reject</button>
+                        </div>
                     </div>
                 </div>
             `;
-        }
-
-        async function loadIPFSContent(proposalId, cid) {
-            try {
-                const response = await fetch(`${IPFS_GATEWAY}/${cid}`);
-                if (!response.ok) return;
-
-                const content = await response.json();
-                const container = document.getElementById(`ipfs-content-${proposalId}`);
-                if (container && content) {
-                    container.innerHTML = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
-                    container.style.display = 'block';
-                }
-            } catch (e) {
-                console.log('Could not load IPFS content:', e);
-            }
         }
 
         function updateCountdown(proposalId, deadline) {
@@ -453,12 +871,6 @@
             }
         }
 
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text || '';
-            return div.innerHTML;
-        }
-
         function formatDate(timestamp) {
             return new Date(timestamp * 1000).toLocaleString();
         }
@@ -475,7 +887,7 @@
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
             loadProposals();
-            setInterval(loadProposals, 30000);
+            setInterval(loadProposals, 15000); // Refresh every 15 seconds
         });
     </script>
 </body>
