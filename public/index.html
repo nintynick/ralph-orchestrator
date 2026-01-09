@@ -621,7 +621,7 @@
         let connectedAddress = null;
         let contract = null;
         let hatsContract = null;
-        let currentIPFSContent = null;
+        let ipfsContentCache = {};  // Map of proposalId -> IPFS content
         let hatWearerCounts = {};
         let taskDetailsExpanded = true;
 
@@ -694,7 +694,6 @@
             showToast('Fetching IPFS content...', 'info');
             const content = await fetchIPFSContent(cid);
             if (content) {
-                currentIPFSContent = content;
                 updateLiveSectionWithIPFS(content);
                 showToast('IPFS content loaded!', 'success');
             } else {
@@ -784,23 +783,32 @@
 
                 proposals.sort((a, b) => b.id - a.id);
 
-                // Update live section
-                const activeProposal = proposals.find(p => p.isActive);
-
-                // Auto-fetch IPFS content for active proposal
-                if (activeProposal && activeProposal.ipfsCid && !currentIPFSContent) {
-                    console.log('Auto-fetching IPFS content:', activeProposal.ipfsCid);
-                    fetchIPFSContent(activeProposal.ipfsCid).then(content => {
+                // Fetch IPFS content for ALL proposals with CIDs (in parallel)
+                const ipfsFetches = proposals
+                    .filter(p => p.ipfsCid && !ipfsContentCache[p.id])
+                    .map(async (p) => {
+                        console.log(`Fetching IPFS for proposal #${p.id}:`, p.ipfsCid);
+                        const content = await fetchIPFSContent(p.ipfsCid);
                         if (content) {
-                            currentIPFSContent = content;
-                            updateLiveSectionWithIPFS(content);
-                            // Re-render proposals with updated content
-                            container.innerHTML = proposals.map(p => renderProposal(p)).join('');
+                            ipfsContentCache[p.id] = content;
+                        }
+                    });
+
+                // Wait for all IPFS fetches to complete, then re-render
+                if (ipfsFetches.length > 0) {
+                    Promise.all(ipfsFetches).then(() => {
+                        container.innerHTML = proposals.map(p => renderProposal(p)).join('');
+                        // Update live section with most recent proposal's content
+                        const mostRecent = proposals[0];
+                        if (mostRecent && ipfsContentCache[mostRecent.id]) {
+                            updateLiveSectionWithIPFS(ipfsContentCache[mostRecent.id]);
                         }
                     });
                 }
 
-                updateLiveSection(activeProposal);
+                // Update live section
+                const activeProposal = proposals.find(p => p.isActive);
+                updateLiveSection(activeProposal, proposals[0]);
 
                 // Update voter info
                 if (proposals.length > 0 && proposals[0].wearerCount) {
@@ -821,7 +829,7 @@
             }
         }
 
-        function updateLiveSection(activeProposal) {
+        function updateLiveSection(activeProposal, mostRecentProposal) {
             const indicator = document.getElementById('liveIndicator');
             const statusEl = document.getElementById('liveStatus');
             const taskHeader = document.getElementById('liveTaskHeader');
@@ -830,14 +838,18 @@
             const taskDetails = document.getElementById('taskDetails');
             const ipfsInputSection = document.getElementById('ipfsInputSection');
 
+            // Get IPFS content for the relevant proposal
+            const relevantProposal = activeProposal || mostRecentProposal;
+            const ipfsContent = relevantProposal ? ipfsContentCache[relevantProposal.id] : null;
+
             if (activeProposal) {
                 indicator.className = 'live-indicator';
                 statusEl.textContent = 'AWAITING VOTE';
                 statsEl.style.display = 'grid';
 
                 // If we have IPFS content, show it
-                if (currentIPFSContent) {
-                    updateLiveSectionWithIPFS(currentIPFSContent);
+                if (ipfsContent) {
+                    updateLiveSectionWithIPFS(ipfsContent);
                     ipfsInputSection.style.display = 'none';
                 } else {
                     taskHeader.textContent = `Proposal #${activeProposal.id}: Iteration Approval`;
@@ -853,6 +865,18 @@
 
                 // Update time countdown
                 updateLiveCountdown(activeProposal.deadline);
+            } else if (mostRecentProposal && ipfsContent) {
+                // No active proposal, but show most recent proposal's task info
+                indicator.className = 'live-indicator idle';
+                statusEl.textContent = 'IDLE';
+                statsEl.style.display = 'grid';
+                updateLiveSectionWithIPFS(ipfsContent);
+                ipfsInputSection.style.display = 'none';
+
+                document.getElementById('statIteration').textContent = mostRecentProposal.id;
+                document.getElementById('statSuccess').textContent = `${mostRecentProposal.yesVotes}/${mostRecentProposal.yesVotes + mostRecentProposal.noVotes}`;
+                document.getElementById('statCost').textContent = ipfsContent?.context?.current_cost ? `$${ipfsContent.context.current_cost.toFixed(2)}` : '$0.00';
+                document.getElementById('statTime').textContent = 'Ended';
             } else {
                 indicator.className = 'live-indicator idle';
                 statusEl.textContent = 'IDLE';
@@ -926,8 +950,9 @@
             const yesPercent = totalVotes > 0 ? (p.yesVotes / totalVotes) * 100 : 50;
             const canVoteOnThis = p.isActive && connectedAddress;
 
-            // Get task name from IPFS content if available
-            const taskName = currentIPFSContent?.context?.task_summary || 'Iteration Approval';
+            // Get task name from this proposal's IPFS content
+            const proposalIpfs = ipfsContentCache[p.id];
+            const taskName = proposalIpfs?.context?.task_summary || 'Iteration Approval';
 
             return `
                 <div class="proposal-card ${p.isActive ? 'active' : ''}" data-id="${p.id}">
